@@ -69,11 +69,21 @@ export class ChecklistStore {
     fs.writeFileSync(filePath(sessionId), JSON.stringify(items, null, 2));
   }
 
-  /** 여러 줄을 한 번에 넣는다. 목록 기호는 떼어낸다. */
+  /**
+   * 여러 줄을 한 번에 넣는다. 목록 기호는 떼어낸다.
+   *
+   * 번호 매기기는 뒤에 점이나 괄호가 붙을 때만 기호로 본다. 숫자만
+   * 적어 넣는 할 일("555" 같은 것)이 통째로 지워지면 안 된다.
+   */
   addMany(sessionId: string, text: string): ChecklistItem[] {
     const lines = text
       .split('\n')
-      .map((l) => l.replace(/^\s*[-*\d.)\]]+\s*/, '').trim().slice(0, MAX_TEXT))
+      .map((l) =>
+        l
+          .replace(/^\s*(?:[-*•]+\s*|\d+[.)\]]\s*)/, '')
+          .trim()
+          .slice(0, MAX_TEXT),
+      )
       .filter(Boolean);
     if (lines.length === 0) return [];
 
