@@ -34,5 +34,11 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // 소스맵은 기본으로 끈다. 켜면 .map이 이미지에 함께 실려 원본
+    // 소스가 그대로 나가고 크기도 JS보다 커진다.
+    //
+    // 콘솔 스택을 소스 줄로 되짚어야 할 때만 잠깐 켠다:
+    //   npx vite build --sourcemap
+    sourcemap: false,
   },
 });

@@ -30,13 +30,17 @@ function sameSessions(a: SessionInfo[], b: SessionInfo[]): boolean {
   if (a.length !== b.length) return false;
   return a.every((x, i) => {
     const y = b[i];
+    // y가 없을 수 있다. 길이는 같아도 폴링 사이에 배열이 바뀔 수 있다.
+    if (!y) return false;
     return (
       x.id === y.id &&
       x.status === y.status &&
       x.title === y.title &&
       x.live === y.live &&
       x.turns === y.turns &&
-      x.pending.length === y.pending.length &&
+      // 권한 요청이 없으면 서버가 이 필드를 아예 빼고 보낸다.
+      // 그대로 .length를 읽으면 폴링 때마다 App이 통째로 죽는다.
+      (x.pending?.length ?? 0) === (y.pending?.length ?? 0) &&
       x.lastActivityAt === y.lastActivityAt
     );
   });

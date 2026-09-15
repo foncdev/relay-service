@@ -30,6 +30,19 @@ function TerminalViewInner({
   const xtermRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
 
+  /**
+   * onExit을 ref에 담아 둔다.
+   *
+   * 부모의 handleExit은 activeId가 바뀔 때마다 새 함수가 된다. 그걸
+   * 아래 effect의 의존성에 그대로 두면, 탭을 옮길 때마다 effect가 다시
+   * 돌아 term.dispose()가 불린다. 화면이 지워졌다가 다시 그려지고
+   * 포커스도 함께 날아간다.
+   *
+   * 터미널을 다시 만들 이유는 id가 바뀔 때뿐이다.
+   */
+  const onExitRef = useRef(onExit);
+  onExitRef.current = onExit;
+
   const [exited, setExited] = useState(terminal.status === 'exited');
   const [error, setError] = useState('');
 
@@ -144,7 +157,7 @@ function TerminalViewInner({
         onExit: (code) => {
           setExited(true);
           term.write(`\r\n\x1b[90m[셸이 종료되었습니다 · 코드 ${code}]\x1b[0m\r\n`);
-          onExit?.();
+          onExitRef.current?.();
         },
         onError: () => setError('연결이 끊겼습니다.'),
       },
@@ -161,7 +174,11 @@ function TerminalViewInner({
       xtermRef.current = null;
       fitRef.current = null;
     };
-  }, [terminal.id, queueInput, flushInput, onExit, syncSize]);
+    // 의존성은 terminal.id 하나다. 나머지는 ref로 최신 값을 읽는다.
+    // 여기에 함수를 넣으면 그 함수가 새로 만들어질 때마다 터미널이
+    // 통째로 다시 생긴다.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [terminal.id]);
 
   // 창 크기가 바뀌면 맞춘다. 셸에게도 알려야 화면이 어긋나지 않는다.
   useEffect(() => {

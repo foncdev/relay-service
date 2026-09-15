@@ -18,6 +18,13 @@ export interface PendingPermission {
   at: string;
 }
 
+/**
+ * 세션 하나.
+ *
+ * 목록(GET /sessions)과 상세(GET /sessions/:id)의 모양이 다르다. 목록은
+ * 가벼운 것만 담아 보내고, 아래 물음표가 붙은 필드는 아예 빠진다.
+ * 필수로 적어두면 컴파일러가 통과시켜 버려서 실행 중에 터진다.
+ */
 export interface SessionInfo {
   id: string;
   workspaceId: string;
@@ -25,15 +32,19 @@ export interface SessionInfo {
   title?: string;
   status: SessionStatus;
   claudeSessionId?: string;
-  policyMode: PolicyMode;
   createdAt: string;
   lastActivityAt: string;
   turns: number;
   totalCostUsd: number;
-  pending: PendingPermission[];
-  memory: Array<{ scope: string; path: string }>;
   /** 프로세스가 살아있는지. 보관된 이력만 남은 세션은 false. */
   live: boolean;
+
+  // --- 아래는 상세에만 있다. 목록에서는 없다고 보고 써야 한다. ---
+
+  policyMode?: PolicyMode;
+  /** 대기 중인 권한 요청. */
+  pending?: PendingPermission[];
+  memory?: Array<{ scope: string; path: string }>;
 }
 
 export type PolicyMode = 'ask-risky' | 'ask-all' | 'auto-approve';
