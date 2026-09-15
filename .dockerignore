@@ -1,0 +1,24 @@
+# 절대 이미지에 들어가면 안 되는 것
+.env
+.env.local
+data/
+
+# 빌드 컨텍스트를 가볍게. web/ 아래 것도 함께 잡힌다.
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 이미지에 필요 없는 것
+.git/
+.gitignore
+test/
+*.md
+Dockerfile
+.dockerignore
+docker-compose.yml
+
+# 에디터·OS
+.DS_Store
+.idea/
+.vscode/
+*.log

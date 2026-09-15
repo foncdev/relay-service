@@ -1,0 +1,1044 @@
+:root {
+  --bg: #16161a;
+  --bg-panel: #1d1d22;
+  --bg-elev: #26262c;
+  --border: #32323a;
+  --text: #e6e6ea;
+  --text-dim: #9a9aa6;
+  --text-faint: #6c6c78;
+  --accent: #c96442;
+  --accent-dim: #8f4630;
+  --ok: #4ea672;
+  --warn: #d9a441;
+  --err: #d96459;
+  --radius: 8px;
+  --mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, monospace;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.55 -apple-system, BlinkMacSystemFont, 'Pretendard', 'Apple SD Gothic Neo',
+    system-ui, sans-serif;
+}
+
+button {
+  font: inherit;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background: var(--bg-elev);
+  color: var(--text);
+  border-radius: 6px;
+  padding: 5px 11px;
+  transition: background 0.12s, border-color 0.12s;
+}
+button:hover:not(:disabled) {
+  background: #303038;
+  border-color: #43434d;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+button.primary:hover:not(:disabled) {
+  background: #d57453;
+  border-color: #d57453;
+}
+button.danger {
+  color: var(--err);
+}
+button.ghost {
+  background: transparent;
+  border-color: transparent;
+  color: var(--text-dim);
+  padding: 3px 7px;
+}
+button.ghost:hover:not(:disabled) {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+
+input,
+textarea,
+select {
+  font: inherit;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  width: 100%;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent-dim);
+}
+textarea {
+  resize: vertical;
+}
+
+/* --- 레이아웃 --- */
+
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 14px;
+  height: 46px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+
+.topbar h1 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.tabs button {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 5px 12px;
+  border-radius: 6px;
+}
+.tabs button.active {
+  background: var(--bg-elev);
+  color: var(--text);
+}
+
+.spacer {
+  flex: 1;
+}
+
+.main {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.sidebar-list {
+  overflow-y: auto;
+  flex: 1;
+  padding: 6px;
+}
+
+.content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* --- 세션 목록 --- */
+
+.session-item {
+  padding: 8px 10px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.session-item:hover {
+  background: var(--bg-elev);
+}
+.session-item.active {
+  background: var(--bg-elev);
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.session-title {
+  font-size: 13px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.session-meta {
+  font-size: 11px;
+  color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: var(--text-faint);
+}
+.dot.idle {
+  background: var(--ok);
+}
+.dot.busy {
+  background: var(--warn);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+.dot.waiting {
+  background: var(--accent);
+  animation: pulse 1s ease-in-out infinite;
+}
+.dot.closed {
+  background: var(--text-faint);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+/* --- 대화 --- */
+
+.chat {
+  flex: 1;
+  overflow-y: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.msg {
+  max-width: 860px;
+  width: 100%;
+}
+
+.msg-role {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 4px;
+}
+
+.msg-body {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.msg.user .msg-body {
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 9px 12px;
+}
+
+.msg.thinking .msg-body {
+  color: var(--text-faint);
+  font-style: italic;
+  border-left: 2px solid var(--border);
+  padding-left: 10px;
+}
+
+.msg.tool .msg-body {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+
+.msg.error .msg-body {
+  color: var(--err);
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+.msg.system .msg-body {
+  color: var(--text-faint);
+  font-size: 12px;
+  text-align: center;
+}
+
+/* --- 권한 요청 --- */
+
+.perm {
+  border: 1px solid var(--accent-dim);
+  background: rgba(201, 100, 66, 0.08);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  max-width: 860px;
+}
+
+.perm-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.perm-summary {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin-bottom: 10px;
+}
+
+.perm-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* --- 입력창 --- */
+
+.composer {
+  border-top: 1px solid var(--border);
+  background: var(--bg-panel);
+  padding: 10px 14px;
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+  flex-shrink: 0;
+}
+
+.composer textarea {
+  max-height: 180px;
+  min-height: 40px;
+}
+
+/* --- 파일 관리 --- */
+
+.files {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.file-tree {
+  width: 320px;
+  border-right: 1px solid var(--border);
+  overflow-y: auto;
+  flex-shrink: 0;
+  padding: 6px;
+}
+
+.file-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+.file-row:hover {
+  background: var(--bg-elev);
+}
+.file-row.active {
+  background: var(--bg-elev);
+  color: var(--accent);
+}
+
+.file-name {
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.file-size {
+  font-size: 11px;
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.file-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.file-editor textarea {
+  flex: 1;
+  border: none;
+  border-radius: 0;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  padding: 14px 16px;
+  resize: none;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+  min-height: 42px;
+}
+
+.crumbs {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 12px;
+  color: var(--text-dim);
+  font-family: var(--mono);
+  overflow: hidden;
+}
+.crumbs button {
+  border: none;
+  background: transparent;
+  color: var(--text-dim);
+  padding: 2px 4px;
+  font-size: 12px;
+  font-family: var(--mono);
+}
+.crumbs button:hover {
+  color: var(--text);
+  background: transparent;
+}
+
+/* --- 공용 --- */
+
+.empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--text-faint);
+  font-size: 13px;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  padding: 20px;
+}
+
+.modal {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  width: 100%;
+  max-width: 420px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.modal h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.field label {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.field .hint {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.toast {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 15px;
+  font-size: 13px;
+  z-index: 100;
+  max-width: 80vw;
+}
+.toast.error {
+  border-color: var(--err);
+  color: var(--err);
+}
+
+.badge {
+  font-size: 11px;
+  padding: 2px 7px;
+  border-radius: 99px;
+  border: 1px solid var(--border);
+  color: var(--text-dim);
+}
+
+.mono {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+
+/* 좁은 화면에서는 사이드바를 접는다. */
+@media (max-width: 760px) {
+  .sidebar,
+  .file-tree {
+    width: 180px;
+  }
+  .chat {
+    padding: 14px;
+  }
+}
+
+/* --- 할 일 목록 --- */
+
+/* 대화와 할 일을 가로로 나눈다. */
+.chat-area {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+.checklist {
+  width: 300px;
+  flex-shrink: 0;
+  border-left: 1px solid var(--border);
+  background: var(--bg-panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.checklist-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
+}
+
+.checklist-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: 6px;
+  min-height: 0;
+}
+
+.checklist-empty {
+  padding: 16px 12px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.7;
+}
+
+.todo {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 6px;
+  font-size: 13px;
+}
+.todo:hover {
+  background: var(--bg-elev);
+}
+
+.todo input[type='checkbox'] {
+  width: auto;
+  margin-top: 2px;
+  flex-shrink: 0;
+  accent-color: var(--accent);
+}
+
+.todo-text {
+  flex: 1;
+  word-break: break-word;
+  cursor: text;
+}
+
+/* 끝난 일은 흐리게 두어 남은 일이 눈에 들어오게 한다. */
+.todo.done .todo-text {
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.todo-edit {
+  flex: 1;
+  padding: 2px 6px;
+  font-size: 13px;
+}
+
+.checklist-add {
+  display: flex;
+  gap: 6px;
+  align-items: flex-end;
+  padding: 10px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.checklist-add textarea {
+  resize: none;
+  font-size: 13px;
+  max-height: 90px;
+}
+
+/* 좁은 화면에서는 할 일을 아래로 내린다. */
+@media (max-width: 900px) {
+  .chat-area {
+    flex-direction: column;
+  }
+  .checklist {
+    width: auto;
+    border-left: none;
+    border-top: 1px solid var(--border);
+    max-height: 45%;
+  }
+}
+
+/* --- 로그인 --- */
+
+.login {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  padding: 20px;
+}
+
+.login-box {
+  width: 100%;
+  max-width: 360px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-box h1 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.login-box .hint {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--text-dim);
+}
+
+.login-error {
+  font-size: 12.5px;
+  color: var(--err);
+  white-space: pre-wrap;
+}
+
+/* 전역 할 일 탭. 가운데에 적당한 너비로 둔다. */
+.todo-page {
+  flex: 1;
+  display: flex;
+  justify-content: center;
+  padding: 20px;
+  min-height: 0;
+}
+
+.todo-page .checklist {
+  width: 100%;
+  max-width: 560px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+/* --- 알림 --- */
+
+.notif {
+  position: relative;
+  border-bottom: 1px solid var(--border);
+}
+
+.notif.read {
+  opacity: 0.62;
+}
+
+/* 목록 한 줄 전체를 누를 수 있게 버튼으로 둔다. */
+.notif-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 34px 10px 10px;
+  background: none;
+  border: 0;
+  color: inherit;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.notif-row:hover {
+  background: var(--elev);
+}
+
+.notif-mark {
+  flex: none;
+  width: 16px;
+  text-align: center;
+  font-weight: 700;
+}
+
+.notif-mark.done {
+  color: var(--ok);
+}
+.notif-mark.error {
+  color: var(--err);
+}
+.notif-mark.permission {
+  color: var(--warn);
+}
+.notif-mark.info {
+  color: var(--faint);
+}
+
+.notif-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.notif-time {
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.notif-body {
+  margin: 0;
+  padding: 0 10px 12px 34px;
+  color: var(--dim);
+  font-size: 13px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.notif-del {
+  position: absolute;
+  top: 8px;
+  right: 6px;
+}
+
+/* --- MOTD --- */
+/* 로그인 직후 서버 상태를 셸 배너처럼 한 번 보여준다. */
+
+.motd {
+  position: relative;
+  padding: 10px 34px 10px 12px;
+  border-bottom: 1px solid var(--border);
+  border-left: 3px solid var(--accent);
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.7;
+}
+
+.motd-line {
+  color: var(--accent);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.motd-close {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+}
+
+/* --- FONCDEV 배너 --- */
+
+.banner {
+  margin: 0 0 4px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* 글자가 어긋나지 않게 줄간격을 촘촘히 고정한다. */
+  font-size: 10px;
+  line-height: 1.05;
+  letter-spacing: 0;
+  color: var(--accent);
+  white-space: pre;
+  overflow: hidden;
+}
+
+.banner-tag {
+  margin: 0 0 18px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+  color: var(--dim);
+}
+
+.motd-banner {
+  font-size: 8px;
+  margin-bottom: 8px;
+}
+
+/*
+ * 58자가 들어갈 폭이 안 되면 글자가 깨져 보이므로 아예 감춘다.
+ * 배너는 장식이고, 없어도 화면 기능에는 지장이 없다.
+ */
+@media (max-width: 560px) {
+  .banner {
+    display: none;
+  }
+}
+
+/* --- 터미널 --- */
+
+.terminals {
+  /* .main이 flex라 flex:1이 없으면 내용 너비만 차지한다.
+     min-width:0이 없으면 xterm이 줄어들지 못해 넘친다. */
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+
+.term-tabs {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  overflow-x: auto;
+}
+
+.term-tabs button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-elev);
+  color: var(--text-dim);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.term-tabs button:hover {
+  color: var(--text);
+}
+
+.term-tabs button.active {
+  background: var(--bg);
+  border-color: var(--accent-dim);
+  color: var(--text);
+}
+
+.term-tabs .dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ok);
+  flex: none;
+}
+
+.term-tabs .dot.exited {
+  background: var(--text-faint);
+}
+
+.term-tabs .term-size {
+  color: var(--text-faint);
+  font-family: var(--mono);
+  font-size: 11px;
+}
+
+.term-tabs .term-new {
+  color: var(--text-dim);
+  border-style: dashed;
+}
+
+.term-tabs .danger {
+  border-color: var(--accent-dim);
+  color: var(--accent);
+}
+
+.term-wrap {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+
+/* xterm은 부모 크기를 채운다. 여백을 조금 둬야 글자가 가장자리에 붙지 않는다. */
+.term-box {
+  flex: 1;
+  min-height: 0;
+  padding: 8px;
+}
+
+.term-box .xterm {
+  height: 100%;
+}
+
+.term-error,
+.term-exited {
+  padding: 6px 12px;
+  font-size: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.term-error {
+  background: rgba(217, 100, 89, 0.12);
+  color: var(--err);
+}
+
+.term-exited {
+  background: var(--bg-elev);
+  color: var(--text-dim);
+}
+
+.term-empty {
+  gap: 12px;
+}
+
+.term-empty .hint {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--text-dim);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  text-align: left;
+  white-space: pre;
+}
+
+/* 다른 화면이 더 작아 셸 크기가 제한된 경우.
+   xterm이 쓰는 영역과 남는 여백을 구분해 보여준다. */
+.term-clipped {
+  padding: 6px 12px;
+  font-size: 12px;
+  background: rgba(217, 164, 65, 0.12);
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+}
+
+.term-box.clipped {
+  /* 셸 영역만큼만 차지하고 나머지는 비워둔다. */
+  flex: 0 0 auto;
+  border-bottom: 1px dashed var(--border);
+}
+
+.term-wrap:has(.term-box.clipped) {
+  /* 남는 공간이 보이도록 위로 붙인다. */
+  justify-content: flex-start;
+}
+
+/* agent가 끊겼을 때. 처음부터 없는 것과 구분해 보여준다. */
+.term-lost {
+  font-size: 15px;
+  color: var(--err);
+  margin: 0;
+}
+
+.term-lost-why {
+  margin: 0;
+  max-width: 460px;
+  color: var(--text-dim);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: center;
+}
+
+.term-lost-why code {
+  font-family: var(--mono);
+  background: var(--bg-elev);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  color: var(--text);
+}

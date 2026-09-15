@@ -1,0 +1,20 @@
+# 앞에 / 가 없어야 web/node_modules 처럼 하위 것도 잡힌다.
+**/node_modules/
+
+# 설정 (토큰이 들어간다)
+.env
+.env.local
+
+# 계정·체크리스트·알림. 개인 정보가 들어 있다.
+# 백업 파일(.bak)까지 함께 막는다.
+data/
+
+# 빌드·로그. web/ 아래 것도 함께 잡힌다.
+**/dist/
+*.tsbuildinfo
+*.log
+
+# 에디터·OS
+.DS_Store
+.idea/
+.vscode/

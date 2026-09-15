@@ -1,0 +1,50 @@
+# relay-service 실행 예시.
+#
+#   cp .env.example .env    # 토큰을 채운다
+#   docker compose up -d
+#
+# 정적 파일(관리 UI·안경앱)은 별도 저장소라 이미지에 없다.
+# 쓰려면 아래 volumes 주석을 풀고 빌드 산출물 경로를 적는다.
+
+services:
+  relay:
+    image: foncdev/relay-service:latest
+    # 소스에서 직접 빌드하려면 image 대신 이걸 쓴다.
+    # build: .
+
+    container_name: relay-service
+    restart: unless-stopped
+
+    ports:
+      - "4100:4100"
+
+    # 토큰은 .env에서 읽는다. 여기 직접 적지 않는다 —
+    # compose 파일은 보통 저장소에 올라가기 때문이다.
+    env_file:
+      - .env
+
+    environment:
+      # 컨테이너 안 경로다. .env의 값이 있어도 이쪽이 이긴다.
+      RELAY_DATA_DIR: /app/data
+      RELAY_WEB_ROOT: /app/web
+      RELAY_GLASSES_ROOT: /app/glasses
+      TZ: Asia/Seoul
+
+    volumes:
+      # 계정·알림·체크리스트. 이게 없으면 컨테이너를 지울 때 함께 사라진다.
+      - ./data:/app/data
+
+      # 정적 파일을 서빙하려면 주석을 푼다. 읽기 전용이면 충분하다.
+      # - ./web-dist:/app/web:ro
+      # - ./glasses-dist:/app/glasses:ro
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:4100/auth/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 5s

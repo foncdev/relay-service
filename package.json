@@ -1,0 +1,39 @@
+{
+  "name": "@foncdev/relay-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "agent-cli와 클라이언트(relay 앱, G2) 사이의 중계 서버. 세션 관리와 파일 관리를 제공한다.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "serve": "node dist/index.js",
+    "docker:build": "docker build -t foncdev/relay-service:latest .",
+    "docker:run": "docker run --rm -p 4100:4100 -v $(pwd)/data:/app/data --env-file .env foncdev/relay-service:latest",
+    "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t foncdev/relay-service:latest --push .",
+    "web:install": "npm --prefix web install",
+    "web:dev": "npm --prefix web run dev",
+    "web:build": "npm --prefix web run build",
+    "build:all": "npm run build && npm run web:build"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "~5.7.3"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/foncdev/relay-service.git"
+  }
+}
