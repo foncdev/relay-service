@@ -1,0 +1,75 @@
+# Docker Hub에 이미지와 설명을 올린다.
+#
+# 언제 도나:
+#   - main에 푸시     → latest 태그 갱신
+#   - v* 태그 푸시    → 버전 태그도 함께 (v0.1.0 → 0.1.0, 0.1, latest)
+#   - 수동 실행       → Actions 탭에서
+#
+# 필요한 저장소 시크릿 (Settings → Secrets → Actions):
+#   DOCKERHUB_USERNAME  Docker Hub 사용자명
+#   DOCKERHUB_TOKEN     액세스 토큰 (비밀번호 말고)
+#                       https://app.docker.com/settings/personal-access-tokens
+
+name: Docker
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+env:
+  IMAGE: foncdev/relay-service
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    # PR에서는 돌지 않는다. 포크가 시크릿에 접근하면 안 된다.
+    if: github.event_name != 'pull_request'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # arm64를 x86 러너에서 빌드하려면 QEMU가 필요하다.
+      - uses: docker/setup-qemu-action@v3
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      # 태그를 자동으로 만든다.
+      #   main 푸시  → latest
+      #   v0.1.0     → 0.1.0, 0.1, latest
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          # 레이어 캐시를 GitHub에 둔다. 두 번째부터 빌드가 빨라진다.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # Docker Hub는 README를 자동으로 가져오지 않는다. 직접 올린다.
+      - name: Hub 설명 갱신
+        uses: peter-evans/dockerhub-description@v4
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: ${{ env.IMAGE }}
+          short-description: 집 안의 기기에 밖에서 붙게 해주는 중계 서버. 관리 UI 포함.
+          readme-filepath: ./DOCKER_HUB.md

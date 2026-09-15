@@ -1,5 +1,8 @@
 # relay-service
 
+[![CI](https://github.com/foncdev/relay-service/actions/workflows/ci.yml/badge.svg)](https://github.com/foncdev/relay-service/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/docker/v/foncdev/relay-service?label=docker)](https://hub.docker.com/r/foncdev/relay-service)
+
 **집 안의 기기에 밖에서 붙게 해주는 중계 서버.**
 
 맥이 공유기 안에 있어도 포트포워딩 없이 접속할 수 있다. **맥이 서버로
@@ -99,6 +102,25 @@ npm run docker:push               # amd64 + arm64 빌드 후 Docker Hub로
 ```
 
 멀티 아키텍처는 `buildx`가 필요하다. Docker Desktop에는 기본 포함돼 있다.
+
+### 자동 배포
+
+`main`에 푸시하면 GitHub Actions가 이미지를 빌드해 올린다. Docker Hub의
+설명(`DOCKER_HUB.md`)도 함께 갱신된다.
+
+| 푸시한 것 | 붙는 태그 |
+|---|---|
+| `main` 브랜치 | `latest` |
+| `v0.1.0` 태그 | `0.1.0`, `0.1`, `latest` |
+
+저장소 시크릿 두 개가 필요하다 (Settings → Secrets and variables → Actions):
+
+| 이름 | 값 |
+|---|---|
+| `DOCKERHUB_USERNAME` | Docker Hub 사용자명 |
+| `DOCKERHUB_TOKEN` | [액세스 토큰](https://app.docker.com/settings/personal-access-tokens) — 비밀번호 말고 |
+
+토큰 권한은 **Read, Write**면 된다.
 
 ---
 
