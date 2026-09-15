@@ -38,7 +38,7 @@
 
 | 탭 | 무엇 | 필요한 것 |
 |---|---|---|
-| 터미널 | 실제 셸 (xterm.js) | terminal agent |
+| 터미널 | 실제 셸 (xterm.js) | [terminal-agent](https://github.com/foncdev/terminal-agent) |
 | 할 일 | 체크리스트 | 없음 — 서버가 직접 |
 | 알림 | 알림함 | 없음 — 서버가 직접 |
 | 세션 | 대화형 세션 | 세션 agent |
@@ -52,7 +52,7 @@ agent는 두 종류를 따로 받는다:
 | 접속구 | 용도 | 전달되는 경로 |
 |---|---|---|
 | `/agent` | 일반 agent | `/sessions` `/workspaces` `/jobs` `/files` `/health` |
-| `/terminal-agent` | 터미널 agent | `/terminals` |
+| `/terminal-agent` | [terminal-agent](https://github.com/foncdev/terminal-agent) | `/terminals` |
 
 **토큰이 서로 다르다.** 터미널 쪽은 셸을 여는 권한이라, 한쪽이 새도 다른
 쪽으로 번지지 않게 갈라뒀다.
@@ -317,6 +317,21 @@ web/                    관리 UI (React + Vite)
   `/terminals/{id}/stream`이 엉뚱한 agent로 샌다
 - **알림과 체크리스트는 서버가 직접 갖는다.** agent가 꺼져 있어도
   보이게 하려는 것이다
+
+---
+
+## 관련 프로젝트
+
+- **[terminal-agent](https://github.com/foncdev/terminal-agent)** — 이 서버에 붙는
+  터미널 agent. `/terminal-agent`로 접속해 셸을 열어준다. 데스크톱에서 쓰던
+  터미널을 여기 관리 UI에서 이어 쓸 수 있다
+
+### 쓰는 것
+
+- [Express](https://expressjs.com/) — HTTP 서버
+- [ws](https://github.com/websockets/ws) — WebSocket
+- [React](https://react.dev/) · [Vite](https://vite.dev/) — 관리 UI
+- [xterm.js](https://xtermjs.org/) — 터미널 탭 렌더러
 
 ---
 
