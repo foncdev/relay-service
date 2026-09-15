@@ -46,10 +46,13 @@ export const config = {
    * 안경앱 정적 파일. 루트(/)에서 서빙한다.
    * G2가 QR로 루트를 여므로 이 경로를 유지한다.
    */
-  glassesRoot: path.resolve(process.env.RELAY_GLASSES_ROOT ?? '../glasses/dist'),
+  glassesRoot: path.resolve(process.env.RELAY_GLASSES_ROOT ?? '../glasses-g2/dist'),
 
-  /** 브라우저용 관리 UI. /web 에서 서빙한다. */
-  webRoot: path.resolve(process.env.RELAY_WEB_ROOT ?? '../web/dist'),
+  /**
+   * 브라우저용 관리 UI. /web 에서 서빙한다.
+   * 안경앱과 달리 이 저장소 안에 있다. Docker는 RELAY_WEB_ROOT로 덮어쓴다.
+   */
+  webRoot: path.resolve(process.env.RELAY_WEB_ROOT ?? './web/dist'),
 
   /** 체크리스트 등 서버가 들고 있는 자료의 위치. */
   dataDir: path.resolve(process.env.RELAY_DATA_DIR ?? './data'),

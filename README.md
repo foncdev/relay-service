@@ -259,8 +259,8 @@ agent는 받은 요청을 자기 HTTP API로 대신 호출해 결과를 돌려�
 | `RELAY_CLIENT_KEY` | (없음) | 레거시 클라이언트 키 |
 | `RELAY_TERMINAL_TOKEN` | (없음) | 터미널 agent 접속 토큰. **비우면 접속 거부** |
 | `RELAY_TOKEN_TTL_DAYS` | `30` | 로그인 토큰 유효기간 |
-| `RELAY_WEB_ROOT` | `../web/dist` | `/web`에 서빙할 관리 UI |
-| `RELAY_GLASSES_ROOT` | `../glasses/dist` | `/`에 서빙할 안경앱 |
+| `RELAY_WEB_ROOT` | `./web/dist` | `/web`에 서빙할 관리 UI |
+| `RELAY_GLASSES_ROOT` | `../glasses-g2/dist` | `/`에 서빙할 안경앱 |
 | `RELAY_DATA_DIR` | `./data` | 계정·알림·체크리스트 저장 위치 |
 | `RELAY_RATE_LIMIT` | `300` | 분당 요청 상한 |
 

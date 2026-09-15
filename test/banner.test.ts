@@ -35,7 +35,9 @@ function readCopy(src: string, file: string): { banner: string; tagline: string 
   return { banner: banner[1]!.trim(), tagline: tagline[1]! };
 }
 
-const COPIES = ['../web/src/banner.ts', '../glasses/src/banner.ts'];
+// web은 이 저장소 안에 있고, glasses는 옆 패키지다.
+// 옆 것이 없으면 그 검사만 건너뛴다.
+const COPIES = ['./web/src/banner.ts', '../glasses-g2/src/banner.ts'];
 
 test('배너는 6줄이고 줄 길이가 모두 같다', () => {
   const lines = BANNER.split('\n');
@@ -47,10 +49,10 @@ test('배너는 6줄이고 줄 길이가 모두 같다', () => {
 
 test('배너에 안경 폰트에 없는 문자만 쓴다는 걸 명시한다', (t) => {
   // 박스드로잉 문자는 G2에서 빈칸이 된다. 안경 코드가 이걸 쓰면 안 된다.
-  const relay = readSibling('../relay/src/core/relay.ts');
-  if (relay === null) return t.skip('relay 패키지가 없습니다 (단독 저장소)');
+  const relay = readSibling('../glasses-ui/src/core/glasses-ui.ts');
+  if (relay === null) return t.skip('glasses-ui 패키지가 없습니다 (단독 저장소)');
 
-  assert.ok(!/[█░╔╗╚╝═║]/.test(relay), 'relay 코어가 안경에 못 쓰는 문자를 쓰고 있습니다.');
+  assert.ok(!/[█░╔╗╚╝═║]/.test(relay), 'glasses-ui 코어가 안경에 못 쓰는 문자를 쓰고 있습니다.');
 });
 
 for (const file of COPIES) {
@@ -64,12 +66,13 @@ for (const file of COPIES) {
   });
 }
 
-test('안경 로고가 relay 코어와 같다', (t) => {
-  const src = readSibling('../relay/src/core/logo.ts');
-  if (src === null) return t.skip('relay 패키지가 없습니다 (단독 저장소)');
+test('안경 로고가 glasses-ui와 같다', (t) => {
+  // 로고는 기기별 아트라 어댑터가 갖는다. core에 있던 것을 옮겼다.
+  const src = readSibling('../glasses-ui/src/adapters/g2-logo.ts');
+  if (src === null) return t.skip('glasses-ui 패키지가 없습니다 (단독 저장소)');
 
   const m = /export const GLASSES_LOGO = \[([\s\S]*?)\];/.exec(src);
-  assert.ok(m, 'relay/src/core/logo.ts에서 GLASSES_LOGO를 찾지 못했습니다.');
+  assert.ok(m, 'glasses-ui에서 GLASSES_LOGO를 찾지 못했습니다.');
   const copy = [...m[1]!.matchAll(/'([^']*)'/g)].map((x) => x[1]!);
   assert.deepEqual(copy, GLASSES_LOGO, '안경 로고가 서버와 다릅니다.');
 });
