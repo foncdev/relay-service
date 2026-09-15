@@ -3,8 +3,8 @@
 #   cp .env.example .env    # 토큰을 채운다
 #   docker compose up -d
 #
-# 정적 파일(관리 UI·안경앱)은 별도 저장소라 이미지에 없다.
-# 쓰려면 아래 volumes 주석을 풀고 빌드 산출물 경로를 적는다.
+# 관리 UI(/web)는 이미지 안에 들어 있다. 안경앱(/)은 별도 저장소라
+# 없으므로 아래 volumes에서 glasses-g2 빌드를 붙인다.
 
 services:
   relay:
@@ -34,9 +34,10 @@ services:
       # 계정·알림·체크리스트. 이게 없으면 컨테이너를 지울 때 함께 사라진다.
       - ./data:/app/data
 
-      # 정적 파일을 서빙하려면 주석을 푼다. 읽기 전용이면 충분하다.
-      # - ./web-dist:/app/web:ro
-      # - ./glasses-dist:/app/glasses:ro
+      # 안경앱. glasses-g2에서 npm run build 한 뒤 붙인다.
+      # 없으면 루트(/)가 빈 화면이 된다.
+      # 관리 UI(/web)는 이미지 안에 들어 있어 따로 붙일 필요가 없다.
+      - ../glasses-g2/dist:/app/glasses:ro
 
     healthcheck:
       test:

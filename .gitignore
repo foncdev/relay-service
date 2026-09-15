@@ -18,3 +18,7 @@ data/
 .DS_Store
 .idea/
 .vscode/
+
+# 로컬 전용 compose 설정.
+# 모노레포로 함께 받았을 때 옆 저장소의 안경앱을 붙이는 데 쓴다.
+docker-compose.override.yml
