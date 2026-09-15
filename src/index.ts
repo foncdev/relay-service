@@ -20,6 +20,7 @@ import { notifications, type NotificationKind } from './core/notifications.js';
 import { BANNER, TAGLINE } from './core/banner.js';
 import { logAuthFailure, rateLimiter, safeEqual } from './core/security.js';
 import { auth, AuthError } from './core/auth.js';
+import { publish, subscribe, subscriberCount } from './core/events.js';
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -27,7 +28,10 @@ app.use(express.json({ limit: '5mb' }));
 // G2와 모바일 앱은 다른 오리진에서 붙는다. 인증은 키가 담당한다.
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', req.header('origin') ?? '*');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
+  // Authorization을 빠뜨리면 토큰을 쓰는 클라이언트가 통째로 막힌다.
+  // 브라우저는 허용되지 않은 헤더를 보내려는 요청을 아예 보내지 않는다.
+  // 같은 출처(예: 서버가 서빙하는 /web)에서는 드러나지 않아 놓치기 쉽다.
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x-api-key, Authorization');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
   res.header('Vary', 'Origin');
   if (req.method === 'OPTIONS') {
@@ -43,7 +47,17 @@ function isProtected(p: string): boolean {
   if (/^\/auth\/(status|setup|login|logout)$/.test(p)) return false;
   // terminals를 빠뜨리면 셸이 무인증으로 열린다. 반드시 포함해야 한다.
   // health도 막는다 — 응답에 allowedRoots(서버 경로)가 들어 있다.
-  return /^\/(sessions|workspaces|jobs|files|terminals|health|checklist|notifications|motd|auth)\b/.test(p);
+  return /^\/(sessions|workspaces|jobs|files|terminals|health|checklist|notifications|motd|auth|events)\b/.test(p);
+}
+
+/**
+ * EventSource는 헤더를 못 붙인다. 이 경로들만 쿼리 토큰을 받는다.
+ *
+ * 토큰이 URL에 드러나므로 꼭 필요한 곳만 연다. 접근 로그나 브라우저
+ * 기록에 남기 때문이다.
+ */
+function acceptsQueryToken(p: string): boolean {
+  return p.endsWith('/stream') || p === '/events';
 }
 
 app.use((req, res, next) => {
@@ -68,11 +82,12 @@ app.use((req, res, next) => {
 
   // EventSource는 헤더를 못 붙이므로 스트림 경로는 쿼리 토큰도 받는다.
   const bearer = req.header('authorization')?.replace(/^Bearer\s+/i, '');
+  const queryToken = acceptsQueryToken(req.path);
   const provided =
     bearer ??
     req.header('x-api-key') ??
-    (req.path.endsWith('/stream') ? (req.query.token as string | undefined) : undefined) ??
-    (req.path.endsWith('/stream') ? (req.query.apiKey as string | undefined) : undefined);
+    (queryToken ? (req.query.token as string | undefined) : undefined) ??
+    (queryToken ? (req.query.apiKey as string | undefined) : undefined);
 
   if (!provided) {
     logAuthFailure(ip, req.path);
@@ -197,6 +212,31 @@ app.get('/motd', (_req, res) => {
   });
 });
 
+
+/**
+ * 체크리스트·알림이 바뀌면 구독자에게 알린다.
+ *
+ * 바꾸는 자리가 열 곳이 넘어 하나씩 넣으면 빠뜨리기 쉽다. 라우트 앞에
+ * 한 번 두고 응답이 나갈 때 판단한다.
+ *
+ * 성공한 변경만 알린다. GET은 아무것도 바꾸지 않고, 4xx·5xx로 끝난
+ * 요청도 마찬가지다.
+ */
+app.use((req, res, next) => {
+  const p = req.path;
+  const watched =
+    p.startsWith('/checklist') ||
+    p.startsWith('/notifications') ||
+    /^\/sessions\/[^/]+\/checklist/.test(p);
+
+  if (!watched || req.method === 'GET' || req.method === 'HEAD') return next();
+
+  res.on('finish', () => {
+    if (res.statusCode >= 400) return;
+    publish(p.startsWith('/notifications') ? 'notifications' : 'checklist');
+  });
+  next();
+});
 
 // --- 전역 체크리스트 ---
 //
@@ -435,6 +475,47 @@ function forwardStream(reg: AgentRegistry, req: Request, res: Response): void {
   req.on('close', cleanup);
   res.on('close', cleanup);
 }
+
+/**
+ * 서버가 들고 있는 자료(체크리스트·알림)가 바뀌면 알려준다.
+ *
+ * 세션은 맥이 SSE로 흘려보내지만 이 둘은 서버가 직접 갖는다. 그래서
+ * 여기서 따로 내보낸다. 웹에서 할 일을 더하면 안경도 곧바로 안다.
+ *
+ * 무엇이 바뀌었는지만 보낸다. 내용은 받는 쪽이 다시 읽는다.
+ */
+app.get('/events', (req, res) => {
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+
+  // 붙자마자 한 번 보낸다. 받는 쪽이 첫 상태를 맞출 수 있다.
+  res.write('event: hello\ndata: {}\n\n');
+
+  const stop = subscribe((topic) => {
+    res.write(`event: changed\ndata: ${JSON.stringify({ topic })}\n\n`);
+  });
+
+  // 누가 듣고 있는지 남긴다. 안경에 반영이 안 될 때 여기부터 본다 —
+  // 붙지도 않았는지, 붙었는데 못 받는지가 갈린다.
+  const who = String(req.headers['user-agent'] ?? '').slice(0, 40);
+  console.log(`[relay] 변화 구독 +1 (${subscriberCount()}명) ${who}`);
+
+  // 조용한 연결이 중간 장비에서 끊기지 않게 한다.
+  const ping = setInterval(() => res.write(': ping\n\n'), 15_000);
+
+  const cleanup = (): void => {
+    clearInterval(ping);
+    stop();
+    console.log(`[relay] 변화 구독 -1 (${subscriberCount()}명)`);
+  };
+  req.on('close', cleanup);
+  res.on('close', cleanup);
+});
 
 // 스트림이 먼저 잡혀야 일반 중계로 새지 않는다.
 //
