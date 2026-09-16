@@ -18,6 +18,9 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
   const [items, setItems] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
+  /** 직접 적어 넣는 알림. 안경으로 메모를 보낼 때 쓴다. */
+  const [input, setInput] = useState('');
+  const [busy, setBusy] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -51,6 +54,34 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
       );
     } catch {
       // 읽음 표시 실패는 내용 보기를 막지 않는다.
+    }
+  }
+
+  /**
+   * 알림을 직접 만든다.
+   *
+   * 첫 줄이 제목, 나머지가 본문이다. 안경은 목록에서 제목만 보여주고
+   * 고르면 본문을 펼치므로 이 구분이 그대로 쓰인다.
+   */
+  async function add(): Promise<void> {
+    const text = input.trim();
+    if (!text || busy) return;
+    const [title, ...rest] = text.split('\n');
+    setBusy(true);
+    try {
+      const { unread: left } = await api.addNotification({
+        title,
+        body: rest.join('\n').trim(),
+        kind: 'info',
+      });
+      setUnread(left);
+      setInput('');
+      // 서버가 id와 시각을 정한다. 직접 끼워 넣지 않고 다시 읽는다.
+      await load();
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : '알림 추가 실패', true);
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -129,6 +160,24 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
             </button>
           </div>
         ))}
+      </div>
+
+      <div className="checklist-add">
+        <textarea
+          rows={2}
+          value={input}
+          placeholder="알림 내용 (첫 줄이 제목, Enter 추가, Shift+Enter 줄바꿈)"
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+              e.preventDefault();
+              void add();
+            }
+          }}
+        />
+        <button className="primary" disabled={!input.trim() || busy} onClick={() => void add()}>
+          추가
+        </button>
       </div>
     </div>
   );

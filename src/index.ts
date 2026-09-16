@@ -233,10 +233,46 @@ app.use((req, res, next) => {
 
   res.on('finish', () => {
     if (res.statusCode >= 400) return;
-    publish(p.startsWith('/notifications') ? 'notifications' : 'checklist');
+    if (p.startsWith('/notifications')) {
+      publish('notifications');
+      return;
+    }
+    // 할 일 변경은 알림도 하나 남긴다. 둘 다 알려야 안경이 배지까지
+    // 새로 읽는다. 하나만 보내면 목록은 바뀌고 배지는 그대로다.
+    publish('checklist');
+    publish('notifications');
   });
   next();
 });
+
+/**
+ * 할 일이 바뀌면 알림으로도 남긴다.
+ *
+ * 웹에서 할 일을 고쳐도 안경은 홈 요약의 숫자만 달라져서, 무엇이
+ * 바뀌었는지 알 수 없었다. 알림으로 남기면 나중에 목록에서 다시 본다.
+ *
+ * 알림 저장이 실패해도 할 일 자체는 이미 바뀌었다. 여기서 던지면
+ * 성공한 요청이 500으로 뒤집히므로 삼킨다.
+ */
+function notifyTodo(title: string, body: string, sessionId?: string): void {
+  try {
+    notifications.add({
+      title,
+      body,
+      kind: 'info',
+      // 전역 목록은 세션에 속하지 않는다. 그대로 넘기면 안경에서
+      // 없는 세션을 열려고 한다.
+      sessionId: sessionId === GLOBAL_LIST ? undefined : sessionId,
+    });
+  } catch {
+    // 알림은 부수적이다. 할 일 변경은 그대로 둔다.
+  }
+}
+
+/** 목록 요약. 여러 줄을 한 번에 넣을 때 본문에 쓴다. */
+function summarize(items: { text: string }[]): string {
+  return items.map((i) => `· ${i.text}`).join('\n');
+}
 
 // --- 전역 체크리스트 ---
 //
@@ -254,11 +290,18 @@ app.post('/checklist', (req, res) => {
     return;
   }
   const added = checklists.addMany(GLOBAL_LIST, text);
+  if (added.length > 0) {
+    notifyTodo(
+      added.length === 1 ? `할 일 추가: ${added[0].text}` : `할 일 ${added.length}건 추가`,
+      summarize(added),
+    );
+  }
   res.status(201).json({ added, items: checklists.list(GLOBAL_LIST) });
 });
 
 app.post('/checklist/clear-done', (_req, res) => {
   const removed = checklists.clearDone(GLOBAL_LIST);
+  if (removed > 0) notifyTodo(`완료한 할 일 ${removed}건 정리`, '');
   res.json({ removed, items: checklists.list(GLOBAL_LIST) });
 });
 
@@ -268,6 +311,7 @@ app.post('/checklist/:itemId/toggle', (req, res) => {
     res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
     return;
   }
+  notifyTodo(`${item.done ? '할 일 완료' : '할 일 되돌림'}: ${item.text}`, '');
   res.json({ item, items: checklists.list(GLOBAL_LIST) });
 });
 
@@ -277,16 +321,23 @@ app.patch('/checklist/:itemId', (req, res) => {
     res.status(400).json({ error: { code: 'empty_text', message: '내용이 비었습니다.' } });
     return;
   }
+  // 바꾸기 전 내용을 알림 본문에 남긴다. 바뀐 뒤에는 알 수 없다.
+  const before = checklists.list(GLOBAL_LIST).find((i) => i.id === req.params.itemId);
   const item = checklists.update(GLOBAL_LIST, req.params.itemId, text);
   if (!item) {
     res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
     return;
   }
+  notifyTodo(`할 일 수정: ${item.text}`, before ? `이전: ${before.text}` : '');
   res.json({ item });
 });
 
 app.delete('/checklist/:itemId', (req, res) => {
-  res.status(checklists.remove(GLOBAL_LIST, req.params.itemId) ? 204 : 404).end();
+  // 지우기 전에 읽어둔다. 알림에 무엇을 지웠는지 남겨야 한다.
+  const item = checklists.list(GLOBAL_LIST).find((i) => i.id === req.params.itemId);
+  const removed = checklists.remove(GLOBAL_LIST, req.params.itemId);
+  if (removed && item) notifyTodo(`할 일 삭제: ${item.text}`, '');
+  res.status(removed ? 204 : 404).end();
 });
 
 // --- 알림 ---
@@ -370,11 +421,17 @@ app.post('/sessions/:id/checklist', (req, res) => {
     res.status(400).json({ error: { code: 'empty_text', message: '추가할 내용이 없습니다.' } });
     return;
   }
+  notifyTodo(
+    added.length === 1 ? `할 일 추가: ${added[0].text}` : `할 일 ${added.length}건 추가`,
+    summarize(added),
+    req.params.id,
+  );
   res.status(201).json({ added, items: checklists.list(req.params.id) });
 });
 
 app.post('/sessions/:id/checklist/clear-done', (req, res) => {
   const removed = checklists.clearDone(req.params.id);
+  if (removed > 0) notifyTodo(`완료한 할 일 ${removed}건 정리`, '', req.params.id);
   res.json({ removed, items: checklists.list(req.params.id) });
 });
 
@@ -389,6 +446,7 @@ app.post('/sessions/:id/checklist/:itemId/toggle', (req, res) => {
     res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
     return;
   }
+  notifyTodo(`${item.done ? '할 일 완료' : '할 일 되돌림'}: ${item.text}`, '', req.params.id);
   res.json({ item, items: checklists.list(req.params.id) });
 });
 
@@ -398,16 +456,21 @@ app.patch('/sessions/:id/checklist/:itemId', (req, res) => {
     res.status(400).json({ error: { code: 'empty_text', message: '내용이 비었습니다.' } });
     return;
   }
+  const before = checklists.list(req.params.id).find((i) => i.id === req.params.itemId);
   const item = checklists.update(req.params.id, req.params.itemId, text);
   if (!item) {
     res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
     return;
   }
+  notifyTodo(`할 일 수정: ${item.text}`, before ? `이전: ${before.text}` : '', req.params.id);
   res.json({ item });
 });
 
 app.delete('/sessions/:id/checklist/:itemId', (req, res) => {
-  res.status(checklists.remove(req.params.id, req.params.itemId) ? 204 : 404).end();
+  const item = checklists.list(req.params.id).find((i) => i.id === req.params.itemId);
+  const removed = checklists.remove(req.params.id, req.params.itemId);
+  if (removed && item) notifyTodo(`할 일 삭제: ${item.text}`, '', req.params.id);
+  res.status(removed ? 204 : 404).end();
 });
 
 // --- 중계 ---

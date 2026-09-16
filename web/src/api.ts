@@ -280,6 +280,16 @@ export const api = {
 
   // --- 알림 ---
   getNotifications: () => request<{ items: Notification[]; unread: number }>('/notifications'),
+  addNotification: (input: {
+    title: string;
+    body?: string;
+    kind?: Notification['kind'];
+    sessionId?: string;
+  }) =>
+    request<{ item: Notification; unread: number }>('/notifications', {
+      method: 'POST',
+      ...json(input),
+    }),
   readNotification: (id: string) =>
     request<{ unread: number }>(`/notifications/${id}/read`, { method: 'POST', ...json({}) }),
   readAllNotifications: () =>
