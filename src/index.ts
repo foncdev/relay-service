@@ -21,9 +21,14 @@ import { BANNER, TAGLINE } from './core/banner.js';
 import { logAuthFailure, rateLimiter, safeEqual } from './core/security.js';
 import { auth, AuthError } from './core/auth.js';
 import { publish, subscribe, subscriberCount } from './core/events.js';
+import { toNotification } from './core/hook.js';
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
+// 훅으로 오는 몸통은 JSON이 아닐 수 있다. 남의 서비스는 형식을 고를
+// 수 없으므로 폼과 평문도 받아 둔다.
+app.use(express.urlencoded({ extended: false, limit: '256kb' }));
+app.use(express.text({ type: ['text/*'], limit: '256kb' }));
 
 // G2와 모바일 앱은 다른 오리진에서 붙는다. 인증은 키가 담당한다.
 app.use((req, res, next) => {
@@ -39,6 +44,86 @@ app.use((req, res, next) => {
     return;
   }
   next();
+});
+
+/*
+ * 외부 알림 훅.
+ *
+ * 다른 서비스가 안경으로 한 줄 띄우고 싶을 때 쓴다. 아래 인증
+ * 미들웨어보다 앞에 둔다 — 그건 세션·파일·셸까지 여는 마스터 키를
+ * 요구하는데, 훅을 쓰는 쪽에 그 키를 건네면 안 되기 때문이다.
+ *
+ * 그래서 전용 키(RELAY_HOOK_KEY)로 따로 인증하고, 할 수 있는 일은
+ * 알림 추가 하나로 묶어 둔다.
+ *
+ *   curl -X POST http://호스트:4100/hooks/notify \
+ *     -H 'X-Hook-Key: …' -H 'Content-Type: application/json' \
+ *     -d '{"title":"배포 완료","body":"v1.2.3"}'
+ *
+ * 경로 끝에 이름을 붙이면(/hooks/notify/github) 어디서 왔는지 남는다.
+ */
+app.post(/^\/hooks\/notify(?:\/([\w.-]{1,40}))?$/, (req, res) => {
+  // 키를 비워두면 훅을 닫는다. 설정을 안 했는데 열려 있으면 사고다.
+  if (!config.hookKey) {
+    res.status(503).json({
+      error: { code: 'hook_disabled', message: 'RELAY_HOOK_KEY가 없어 훅이 닫혀 있습니다.' },
+    });
+    return;
+  }
+
+  const ip = req.ip ?? 'unknown';
+  if (!rateLimiter.allow(ip)) {
+    res.status(429).json({
+      error: { code: 'rate_limited', message: '요청이 너무 잦습니다. 잠시 후 다시 시도하세요.' },
+    });
+    return;
+  }
+
+  /*
+   * 키는 헤더로 받는다. 쿼리로도 받아주는데, 훅을 거는 쪽이 헤더를
+   * 못 붙이는 경우가 있기 때문이다(간단한 웹훅 설정 화면 등).
+   * 다만 URL에 남으므로 헤더를 권한다.
+   */
+  const provided =
+    req.header('x-hook-key') ??
+    req.header('authorization')?.replace(/^Bearer\s+/i, '') ??
+    (req.query.key as string | undefined) ??
+    '';
+
+  if (!safeEqual(provided, config.hookKey)) {
+    logAuthFailure(ip, req.path);
+    res.status(401).json({ error: { code: 'unauthorized', message: '훅 키가 맞지 않습니다.' } });
+    return;
+  }
+
+  // 경로에 붙은 이름. 어디서 온 알림인지 본문 끝에 남긴다.
+  const source = req.params[0] ? String(req.params[0]) : undefined;
+  const mapped = toNotification(req.body, source);
+  if (!mapped) {
+    res.status(400).json({
+      error: {
+        code: 'empty_payload',
+        message: '알림으로 만들 내용이 없습니다. title이나 text를 담아 보내세요.',
+      },
+    });
+    return;
+  }
+
+  try {
+    const item = notifications.add({
+      title: mapped.title,
+      // 어디서 왔는지 남긴다. 제목은 좁아서 본문에 붙인다.
+      body: mapped.source ? `${mapped.body}\n\n— ${mapped.source}`.trim() : mapped.body,
+      kind: mapped.kind,
+    });
+    publish('notifications');
+    console.log(`[relay] 훅 알림${source ? ` (${source})` : ''}: ${item.title}`);
+    res.status(201).json({ id: item.id, unread: notifications.unreadCount() });
+  } catch (err) {
+    res.status(400).json({
+      error: { code: 'hook_failed', message: err instanceof Error ? err.message : '알림 추가 실패' },
+    });
+  }
 });
 
 /** 중계 API만 인증한다. 정적 파일과 상태 확인은 열어둔다. */

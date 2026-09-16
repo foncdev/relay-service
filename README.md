@@ -205,6 +205,43 @@ DELETE     /notifications/{id}
 GET|POST   /sessions/{id}/checklist    세션별 체크리스트
 ```
 
+### 외부 알림 훅
+
+다른 서비스가 안경에 한 줄 띄울 때 쓴다. 넣으면 SSE로 안경·폰·웹에
+바로 퍼진다.
+
+```
+POST /hooks/notify           외부 알림 추가
+POST /hooks/notify/{이름}     어디서 왔는지 함께 남긴다
+```
+
+**전용 키를 쓴다.** 클라이언트 키는 세션·파일·셸까지 여는 마스터라
+남의 자동화에 건네면 안 된다. `RELAY_HOOK_KEY`를 따로 발급하면 그
+키로는 알림 추가밖에 못 한다. 비워두면 훅이 닫힌다(`503`).
+
+```bash
+curl -X POST http://호스트:4100/hooks/notify/github \
+  -H 'X-Hook-Key: 발급한키' \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"PR 머지됨","body":"#42 알림 훅 추가"}'
+```
+
+보내는 쪽을 고칠 수 있으면 `{title, body, kind}`로 주면 된다. 남의
+서비스라 형식을 바꿀 수 없으면 그대로 보내도 된다 — 흔한 이름
+(`text`·`message`·`subject`·`summary` 등)을 훑어 제목을 찾고,
+`level`·`severity`·`status`에서 심각도를 읽어 종류를 정한다. 아는
+이름이 하나도 없으면 몸통을 그대로 본문에 넣는다. 알림이 통째로
+사라지는 것보다 무엇이 왔는지 보이는 편이 낫다.
+
+평문(`text/plain`)과 폼도 받는다.
+
+| 응답 | 뜻 |
+|---|---|
+| `201` | 알림을 넣었다 |
+| `400` | 알림으로 만들 내용이 없다 |
+| `401` | 훅 키가 틀리다 |
+| `503` | `RELAY_HOOK_KEY`가 없어 훅이 닫혀 있다 |
+
 ### agent로 전달
 
 연결된 agent가 없으면 `503 no_agent`.
@@ -257,6 +294,7 @@ agent는 받은 요청을 자기 HTTP API로 대신 호출해 결과를 돌려�
 | `PORT` / `HOST` | `4100` / `0.0.0.0` | |
 | `RELAY_AGENT_TOKEN` | (없음) | 일반 agent 접속 토큰 |
 | `RELAY_CLIENT_KEY` | (없음) | 레거시 클라이언트 키 |
+| `RELAY_HOOK_KEY` | (없음) | 외부 알림 훅 전용 키. 클라이언트 키와 다르게 둔다. **비우면 훅 닫힘** |
 | `RELAY_TERMINAL_TOKEN` | (없음) | 터미널 agent 접속 토큰. **비우면 접속 거부** |
 | `RELAY_TOKEN_TTL_DAYS` | `30` | 로그인 토큰 유효기간 |
 | `RELAY_WEB_ROOT` | `./web/dist` | `/web`에 서빙할 관리 UI |

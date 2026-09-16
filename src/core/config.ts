@@ -54,6 +54,16 @@ export const config = {
    */
   webRoot: path.resolve(process.env.RELAY_WEB_ROOT ?? './web/dist'),
 
+  /**
+   * 외부 서비스가 알림만 넣을 때 쓰는 키.
+   *
+   * clientKey와 따로 둔다. 그건 세션·파일·셸까지 여는 마스터라, 남의
+   * 자동화나 웹훅에 넘기면 사고가 난다. 이 키로는 알림 추가밖에 못 한다.
+   *
+   * 비워두면 훅을 아예 닫는다. 기능이 조용히 열려 있는 것보다 낫다.
+   */
+  hookKey: process.env.RELAY_HOOK_KEY ?? '',
+
   /** 체크리스트 등 서버가 들고 있는 자료의 위치. */
   dataDir: path.resolve(process.env.RELAY_DATA_DIR ?? './data'),
 
@@ -74,6 +84,13 @@ export function warnings(): string[] {
   }
   if (config.agentToken && config.agentToken.length < 24) {
     out.push('RELAY_AGENT_TOKEN이 짧습니다. 24자 이상을 권합니다.');
+  }
+  // 훅 키는 남에게 건네는 값이라 짧으면 더 위험하다.
+  if (config.hookKey && config.hookKey.length < 24) {
+    out.push('RELAY_HOOK_KEY가 짧습니다. 24자 이상을 권합니다.');
+  }
+  if (config.hookKey && config.hookKey === config.clientKey) {
+    out.push('RELAY_HOOK_KEY가 RELAY_CLIENT_KEY와 같습니다. 훅에 마스터 키를 주면 안 됩니다.');
   }
   return out;
 }
