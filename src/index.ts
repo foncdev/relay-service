@@ -22,6 +22,7 @@ import { logAuthFailure, rateLimiter, safeEqual } from './core/security.js';
 import { auth, AuthError } from './core/auth.js';
 import { publish, subscribe, subscriberCount } from './core/events.js';
 import { toNotification } from './core/hook.js';
+import { firstRunGuide } from './core/guide.js';
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
@@ -797,9 +798,12 @@ server.listen(config.port, config.host, () => {
   console.log(`\n${BANNER}\n${' '.repeat(20)}${TAGLINE}\n`);
   console.log(`[relay] http://${config.host}:${config.port}`);
   console.log(`[relay] agent 접속구: ws://${config.host}:${config.port}/agent`);
+  console.log(`[relay] 터미널 접속구: ws://${config.host}:${config.port}/terminal-agent`);
   console.log(`[relay] 안경앱 /     : ${fs.existsSync(config.glassesRoot) ? config.glassesRoot : '(없음)'}`);
   console.log(`[relay] 웹 UI  /web  : ${fs.existsSync(config.webRoot) ? config.webRoot : '(없음)'}`);
   for (const w of warnings()) console.warn(`[relay] 경고: ${w}`);
+  // 계정이 없으면 서버가 잠겨 있다. 무엇을 해야 하는지 로그에서 바로 보이게 한다.
+  if (!auth.isConfigured) console.log(`\n${firstRunGuide().map((l) => (l ? `[relay] ${l}` : '[relay]')).join('\n')}\n`);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
