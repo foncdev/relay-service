@@ -98,6 +98,34 @@ ws://<서버>:4100/terminal-agent?name=<이름>&token=<RELAY_TERMINAL_TOKEN>
 붙으면 서버 로그에 `agent 접속`이 찍히고, 관리 UI의 해당 탭이 "미연결"에서
 바뀐다. 할 일·알림 탭은 agent 없이도 바로 쓸 수 있다.
 
+### 초기화
+
+비밀번호를 잊었거나 처음부터 다시 설정하려면 **서버를 멈추고** 초기화
+명령을 돌린 뒤 다시 띄운다. `/web`에 초기 설정 화면이 다시 뜬다.
+
+```bash
+npm run reset            # 계정과 로그인 토큰만. 알림·체크리스트·스니펫은 남는다
+npm run reset -- --all   # 전부
+```
+
+Docker에서는:
+
+```bash
+docker compose stop relay
+docker compose run --rm relay node dist/reset.js --yes          # 계정만
+docker compose run --rm relay node dist/reset.js --all --yes    # 전부
+docker compose start relay
+```
+
+- **웹에는 두지 않는다.** 인터넷에 열린 서버라, 웹에서 되면 누구나 계정을
+  날리고 새로 만들 수 있다. 서버 파일에 손댈 수 있는 사람만 할 수 있어야 한다
+- **지우지 않고 옮긴다.** 계정만이면 `data/auth.json.bak.<시각>`, 전부면
+  `data/reset-<시각>/`으로 간다. 잘못 돌렸으면 제자리로 옮기면 된다
+- **서버가 떠 있으면 거부한다.** 떠 있는 서버는 계정을 메모리에 들고 있어서
+  파일을 지워도 다음 저장 때 도로 써진다. 같은 기기의 포트로만 확인하므로,
+  Docker에서는 위처럼 직접 멈춰야 한다
+- `.env`의 토큰(`RELAY_AGENT_TOKEN` 등)은 건드리지 않는다. 바꾸려면 직접 고친다
+
 ---
 
 ## Docker로 실행 (권장)

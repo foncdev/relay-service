@@ -11,6 +11,7 @@
     "test": "tsx --test test/*.test.ts",
     "build": "tsc -p tsconfig.build.json",
     "serve": "node dist/index.js",
+    "reset": "tsx src/reset.ts",
     "docker:build": "docker build -t foncdev/relay-service:latest .",
     "docker:run": "docker run --rm -p 4100:4100 -v $(pwd)/data:/app/data --env-file .env foncdev/relay-service:latest",
     "docker:push": "docker buildx build --platform linux/amd64,linux/arm64 -t foncdev/relay-service:latest --push .",
