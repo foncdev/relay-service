@@ -12,19 +12,42 @@ import http from 'node:http';
 import path from 'node:path';
 import express, { type NextFunction, type Request, type Response } from 'express';
 import { WebSocketServer } from 'ws';
-import { config, warnings } from './core/config.js';
+import { clientKeyUsable, config, warnings } from './core/config.js';
 import { agents, AgentRegistry } from './core/agents.js';
 import { termAgents } from './core/term-agents.js';
 import { checklists, ChecklistError, GLOBAL_LIST } from './core/checklist.js';
 import { notifications, type NotificationKind } from './core/notifications.js';
 import { BANNER, TAGLINE } from './core/banner.js';
-import { logAuthFailure, rateLimiter, safeEqual } from './core/security.js';
+import { globalLoginFailures, logAuthFailure, loginLimiter, rateLimiter, safeEqual } from './core/security.js';
 import { auth, AuthError } from './core/auth.js';
 import { publish, subscribe, subscriberCount } from './core/events.js';
 import { toNotification } from './core/hook.js';
 import { firstRunGuide } from './core/guide.js';
 
 const app = express();
+
+// 리버스 프록시 뒤라면 실제 IP를 X-Forwarded-For에서 읽는다. config.trustProxy 참고.
+if (config.trustProxy) {
+  const n = Number(config.trustProxy);
+  app.set('trust proxy', Number.isInteger(n) ? n : config.trustProxy);
+}
+
+/*
+ * 보안 헤더.
+ *
+ *  - 프레임 금지: 관리 화면을 남의 페이지에 투명하게 겹쳐 권한 승인이나
+ *    명령 실행 버튼을 누르게 만들 수 있다(클릭재킹)
+ *  - nosniff: 올린 글을 스크립트로 해석하지 않게
+ *  - no-referrer: 스트림 주소의 ?token=이 다른 사이트로 넘어가지 않게
+ */
+app.use((_req, res, next) => {
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Content-Security-Policy', "frame-ancestors 'none'");
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  next();
+});
+
 app.use(express.json({ limit: '5mb' }));
 // 훅으로 오는 몸통은 JSON이 아닐 수 있다. 남의 서비스는 형식을 고를
 // 수 없으므로 폼과 평문도 받아 둔다.
@@ -182,9 +205,9 @@ app.use((req, res, next) => {
   }
 
   // 세션 토큰이 우선. 환경변수 키는 기존 클라이언트 호환용으로 남긴다.
+  // 짧은 키는 받지 않는다(clientKeyUsable) — 셸까지 여는 마스터 키라서.
   const ok =
-    auth.verifyToken(provided) ||
-    (config.clientKey.length > 0 && safeEqual(provided, config.clientKey));
+    auth.verifyToken(provided) || (clientKeyUsable && safeEqual(provided, config.clientKey));
 
   if (!ok) {
     logAuthFailure(ip, req.path);
@@ -201,28 +224,42 @@ app.get('/auth/status', (_req, res) => {
   res.json({ configured: auth.isConfigured, username: auth.username });
 });
 
-/** 최초 관리자 계정을 만든다. 이미 있으면 409로 거부한다. */
+/**
+ * 최초 관리자 계정을 만든다. 이미 있으면 409로 거부한다.
+ *
+ * 시작 로그에 찍힌 설정 코드가 있어야 한다(auth.setupCode). 계정이 없는
+ * 동안 이 경로는 인터넷의 누구에게나 열려 있기 때문이다.
+ */
 app.post('/auth/setup', (req, res, next) => {
-  const { username, password } = (req.body ?? {}) as Record<string, string>;
+  const ip = req.ip ?? 'unknown';
+  if (!loginLimiter.allow(ip)) {
+    res.status(429).json({ error: { code: 'rate_limited', message: '잠시 후 다시 시도하세요.' } });
+    return;
+  }
+  const { username, password, code } = (req.body ?? {}) as Record<string, string>;
   auth
-    .setup(String(username ?? ''), String(password ?? ''))
+    .setup(String(username ?? ''), String(password ?? ''), String(code ?? ''))
     .then((token) => res.status(201).json({ token, username }))
-    .catch(next);
+    .catch((err) => {
+      logAuthFailure(ip, '/auth/setup');
+      next(err);
+    });
 });
 
 app.post('/auth/login', (req, res, next) => {
   const ip = req.ip ?? 'unknown';
-  // 로그인은 특히 조심스럽게 센다.
-  if (!rateLimiter.allow(`login:${ip}`)) {
+  // 로그인은 따로, 더 촘촘히 센다. 여러 IP로 나눠 시도하는 것은 전체 실패로 막는다.
+  if (!loginLimiter.allow(ip) || globalLoginFailures.blocked('all')) {
     res.status(429).json({ error: { code: 'rate_limited', message: '잠시 후 다시 시도하세요.' } });
     return;
   }
   const { username, password, label } = (req.body ?? {}) as Record<string, string>;
   auth
-    .login(String(username ?? ''), String(password ?? ''), String(label ?? '기기'))
+    .login(String(username ?? ''), String(password ?? ''), String(label ?? '기기').slice(0, 60))
     .then((token) => res.json({ token, username }))
     .catch((err) => {
       logAuthFailure(ip, '/auth/login');
+      globalLoginFailures.allow('all');
       next(err);
     });
 });
@@ -712,9 +749,9 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
     res.status(400).json({ error: { code: 'checklist_error', message: err.message } });
     return;
   }
-  res.status(500).json({
-    error: { code: 'internal_error', message: err instanceof Error ? err.message : String(err) },
-  });
+  // 내부 오류 문구에는 경로나 내부 사정이 섞인다. 밖에는 알리지 않고 로그로 남긴다.
+  console.error('[relay] 처리 중 오류:', err);
+  res.status(500).json({ error: { code: 'internal_error', message: '서버 오류가 났습니다.' } });
 });
 
 // --- agent-cli 접속구 ---
@@ -753,7 +790,15 @@ wss.on('connection', (socket, req) => {
   const token = url.searchParams.get('token') ?? '';
   const name = url.searchParams.get('name') || '이름 없는 agent';
 
-  if (config.agentToken && !safeEqual(token, config.agentToken)) {
+  // 토큰이 없으면 받지 않는다. 받아주면 아무나 agent로 붙고, 먼저 붙은
+  // 쪽을 쓰므로 진짜 agent가 끊긴 사이 모든 프롬프트가 그쪽으로 갔다.
+  // terminal-agent 접속구와 같은 규칙이다.
+  if (!config.agentToken) {
+    logAuthFailure(req.socket.remoteAddress ?? 'unknown', '/agent');
+    socket.close(1008, 'RELAY_AGENT_TOKEN이 설정되지 않았습니다.');
+    return;
+  }
+  if (!safeEqual(token, config.agentToken)) {
     logAuthFailure(req.socket.remoteAddress ?? 'unknown', '/agent');
     socket.close(1008, '토큰이 올바르지 않습니다.');
     return;
@@ -803,7 +848,7 @@ server.listen(config.port, config.host, () => {
   console.log(`[relay] 웹 UI  /web  : ${fs.existsSync(config.webRoot) ? config.webRoot : '(없음)'}`);
   for (const w of warnings()) console.warn(`[relay] 경고: ${w}`);
   // 계정이 없으면 서버가 잠겨 있다. 무엇을 해야 하는지 로그에서 바로 보이게 한다.
-  if (!auth.isConfigured) console.log(`\n${firstRunGuide().map((l) => (l ? `[relay] ${l}` : '[relay]')).join('\n')}\n`);
+  if (!auth.isConfigured) console.log(`\n${firstRunGuide(auth.setupCode).map((l) => (l ? `[relay] ${l}` : '[relay]')).join('\n')}\n`);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {

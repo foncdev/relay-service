@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { randomBytes, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, randomInt, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { config } from './config.js';
 
@@ -30,7 +30,15 @@ interface StoredAccount {
 }
 
 interface StoredToken {
-  token: string;
+  /**
+   * 토큰의 SHA-256. 원문은 저장하지 않는다.
+   *
+   * 예전에는 원문을 적어 두어, auth.json이 백업이나 볼륨으로 새면 그대로
+   * 로그인됐다. 토큰은 32바이트 난수라 소금 없는 해시로 충분하다.
+   */
+  hash: string;
+  /** 예전 형식. 읽을 때 hash로 바꾸고 지운다. */
+  token?: string;
   createdAt: string;
   expiresAt: string;
   /** 어떤 기기인지 알아보기 위한 메모. */
@@ -48,6 +56,25 @@ export class AuthError extends Error {
   constructor(message: string, readonly status = 400) {
     super(message);
   }
+}
+
+function hashToken(token: string): string {
+  return createHash('sha256').update(token).digest('hex');
+}
+
+/** 헷갈리는 글자(0·O·1·I·L)를 뺀 설정 코드 글자. */
+const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
+
+/** 사람이 옮겨 적기 쉬운 설정 코드. 12자(약 59비트), 4자씩 끊는다. */
+function newSetupCode(): string {
+  let code = '';
+  for (let i = 0; i < 12; i++) code += CODE_ALPHABET[randomInt(CODE_ALPHABET.length)];
+  return code.match(/.{4}/g)!.join('-');
+}
+
+/** 입력한 코드를 비교하기 좋게 맞춘다. 대소문자와 -·공백은 가리지 않는다. */
+function normalizeCode(code: string): string {
+  return code.toUpperCase().replace(/[^A-Z0-9]/g, '');
 }
 
 /** 비밀번호를 해시한다. 같은 비밀번호라도 salt가 달라 결과가 다르다. */
@@ -69,10 +96,21 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 
 export class AuthStore {
   private data: AuthFile = { tokens: [] };
+  /**
+   * 초기 설정에 필요한 일회용 코드. 계정이 없을 때만 있다.
+   *
+   * 계정이 없는 동안 /auth/setup은 인터넷의 누구에게나 열려 있어, 서버를
+   * 띄우고 브라우저를 열기 전에 남이 먼저 계정을 만들 수 있었다. 코드는
+   * 시작 로그에만 찍히므로 서버 로그를 볼 수 있는 사람만 설정할 수 있다.
+   */
+  private setupCodeValue?: string;
+  /** 설정이 진행 중인지. 해싱을 기다리는 사이 두 번째 설정이 끼어들지 못하게. */
+  private settingUp = false;
 
   constructor() {
     fs.mkdirSync(config.dataDir, { recursive: true });
     this.load();
+    if (!this.isConfigured) this.setupCodeValue = newSetupCode();
   }
 
   private load(): void {
@@ -82,7 +120,23 @@ export class AuthStore {
     } catch {
       // 아직 설정 전이다.
       this.data = { tokens: [] };
+      return;
     }
+    // 원문으로 저장된 예전 토큰을 해시로 옮긴다. 로그인은 그대로 유지된다.
+    let migrated = false;
+    for (const t of this.data.tokens) {
+      if (t.token) {
+        t.hash = hashToken(t.token);
+        delete t.token;
+        migrated = true;
+      }
+    }
+    if (migrated) this.save();
+  }
+
+  /** 초기 설정 코드. 설정이 끝났으면 없다. 시작 로그에 찍는 데 쓴다. */
+  get setupCode(): string | undefined {
+    return this.isConfigured ? undefined : this.setupCodeValue;
   }
 
   private save(): void {
@@ -103,21 +157,35 @@ export class AuthStore {
    * 첫 설정. 이미 계정이 있으면 거부한다.
    * 열려 있는 설정 경로로 계정이 덮어써지면 곧 탈취로 이어진다.
    */
-  async setup(username: string, password: string): Promise<string> {
+  async setup(username: string, password: string, code: string): Promise<string> {
     if (this.isConfigured) {
       throw new AuthError('이미 설정이 끝났습니다.', 409);
+    }
+    const expected = Buffer.from(normalizeCode(this.setupCodeValue ?? ''));
+    const given = Buffer.from(normalizeCode(code));
+    if (expected.length === 0 || given.length !== expected.length || !timingSafeEqual(given, expected)) {
+      throw new AuthError('설정 코드가 맞지 않습니다. 서버 시작 로그에서 확인하세요.', 403);
     }
     this.assertStrong(password);
     if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) {
       throw new AuthError('아이디는 영문/숫자/밑줄/하이픈 3~32자여야 합니다.');
     }
 
-    this.data.account = {
-      username,
-      password: await hashPassword(password),
-      createdAt: new Date().toISOString(),
-    };
-    this.save();
+    // 확인과 저장 사이에 해싱을 기다린다. 그 사이 두 번째 요청이 들어오면
+    // 둘 다 통과해 나중 것이 계정을 덮어썼다(둘 다 관리자 토큰을 받았다).
+    if (this.settingUp) {
+      throw new AuthError('설정이 진행 중입니다.', 409);
+    }
+    this.settingUp = true;
+    try {
+      const hashed = await hashPassword(password);
+      if (this.isConfigured) throw new AuthError('이미 설정이 끝났습니다.', 409);
+      this.data.account = { username, password: hashed, createdAt: new Date().toISOString() };
+      this.setupCodeValue = undefined;
+      this.save();
+    } finally {
+      this.settingUp = false;
+    }
     return this.issueToken('최초 설정');
   }
 
@@ -154,7 +222,7 @@ export class AuthStore {
     const token = randomBytes(32).toString('base64url');
     const now = Date.now();
     this.data.tokens.push({
-      token,
+      hash: hashToken(token),
       label,
       createdAt: new Date(now).toISOString(),
       expiresAt: new Date(now + TOKEN_TTL_MS).toISOString(),
@@ -168,10 +236,10 @@ export class AuthStore {
   verifyToken(token: string): boolean {
     if (!token) return false;
     const now = Date.now();
+    const given = Buffer.from(hashToken(token), 'hex');
     const found = this.data.tokens.find((t) => {
-      const a = Buffer.from(t.token);
-      const b = Buffer.from(token);
-      return a.length === b.length && timingSafeEqual(a, b);
+      const stored = Buffer.from(t.hash, 'hex');
+      return stored.length === given.length && timingSafeEqual(stored, given);
     });
     if (!found) return false;
     if (new Date(found.expiresAt).getTime() < now) {
@@ -182,7 +250,8 @@ export class AuthStore {
   }
 
   revoke(token: string): void {
-    this.data.tokens = this.data.tokens.filter((t) => t.token !== token);
+    const hash = hashToken(token);
+    this.data.tokens = this.data.tokens.filter((t) => t.hash !== hash);
     this.save();
   }
 

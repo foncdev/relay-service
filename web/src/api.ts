@@ -206,10 +206,11 @@ export interface AuthStatus {
 export const api = {
   // --- 인증 ---
   authStatus: () => request<AuthStatus>('/auth/status'),
-  setup: (username: string, password: string) =>
+  /** code는 서버 시작 로그에 찍힌 설정 코드다. */
+  setup: (username: string, password: string, code: string) =>
     request<{ token: string; username: string }>('/auth/setup', {
       method: 'POST',
-      ...json({ username, password }),
+      ...json({ username, password, code }),
     }),
   login: (username: string, password: string) =>
     request<{ token: string; username: string }>('/auth/login', {

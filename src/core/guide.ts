@@ -6,7 +6,7 @@ import { config } from './config.js';
  * 계정이 없으면 서버는 잠겨 있고(503 setup_required), 무엇을 해야 풀리는지
  * 로그만 봐서는 알 수 없다. 그래서 계정이 생기기 전까지만 순서를 적어준다.
  */
-export function firstRunGuide(): string[] {
+export function firstRunGuide(setupCode = ''): string[] {
   // 0.0.0.0은 브라우저로 열 수 없는 주소라 localhost로 바꿔 보여준다.
   const host = config.host === '0.0.0.0' || config.host === '::' ? 'localhost' : config.host;
   const base = `http://${host}:${config.port}`;
@@ -17,6 +17,9 @@ export function firstRunGuide(): string[] {
     '',
     '1. 관리자 계정 만들기',
     `   브라우저에서 ${base}/web 을 열면 초기 설정 화면이 뜹니다.`,
+    `   설정 코드: ${setupCode}`,
+    '   이 코드를 넣어야 계정이 만들어집니다. 로그를 볼 수 있는 사람만',
+    '   설정할 수 있게 하려는 것입니다. 서버를 다시 띄우면 코드가 바뀝니다.',
     '   아이디는 영문/숫자/밑줄/하이픈 3~32자, 비밀번호는 10자 이상입니다.',
     '   계정을 만들기 전까지 API는 503 setup_required로 잠겨 있습니다.',
     '',

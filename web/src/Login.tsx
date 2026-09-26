@@ -13,6 +13,7 @@ export function Login({ onDone }: { onDone: (username: string) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [code, setCode] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -37,7 +38,7 @@ export function Login({ onDone }: { onDone: (username: string) => void }) {
     setBusy(true);
     try {
       const result = isSetup
-        ? await api.setup(username.trim(), password)
+        ? await api.setup(username.trim(), password, code.trim())
         : await api.login(username.trim(), password);
       setToken(result.token);
       onDone(result.username);
@@ -56,7 +57,7 @@ export function Login({ onDone }: { onDone: (username: string) => void }) {
     );
   }
 
-  const ready = username.trim() && password && (!isSetup || confirm);
+  const ready = username.trim() && password && (!isSetup || (confirm && code.trim()));
 
   return (
     <div className="login">
@@ -75,15 +76,30 @@ export function Login({ onDone }: { onDone: (username: string) => void }) {
         <h1>{isSetup ? '초기 설정' : '로그인'}</h1>
         <p className="hint">
           {isSetup
-            ? '관리자 계정을 만듭니다. 이 계정으로 에이전트를 제어하므로 비밀번호를 신중히 정하세요.'
+            ? '관리자 계정을 만듭니다. 서버 시작 로그에 찍힌 설정 코드가 필요합니다. 이 계정으로 에이전트를 제어하므로 비밀번호를 신중히 정하세요.'
             : 'Relay 서버에 로그인합니다.'}
         </p>
+
+        {/* 설정 코드는 서버 로그에만 찍힌다. 로그를 볼 수 있는 사람만 계정을 만든다. */}
+        {isSetup && (
+          <div className="field">
+            <label htmlFor="login-code">설정 코드</label>
+            <input
+              id="login-code"
+              autoFocus
+              autoComplete="one-time-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              placeholder="서버 로그의 XXXX-XXXX-XXXX"
+            />
+          </div>
+        )}
 
         <div className="field">
           <label htmlFor="login-user">아이디</label>
           <input
             id="login-user"
-            autoFocus
+            autoFocus={!isSetup}
             autoComplete="username"
             value={username}
             onChange={(e) => setUsername(e.target.value)}

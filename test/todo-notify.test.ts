@@ -50,15 +50,22 @@ test.before(async () => {
       RELAY_AGENT_TOKEN: 't',
       RELAY_TERMINAL_TOKEN: 't',
     },
-    stdio: 'ignore',
+    stdio: ['ignore', 'pipe', 'ignore'],
   });
+  // 초기 설정에는 시작 로그에 찍히는 설정 코드가 필요하다.
+  let log = '';
+  proc.stdout!.on('data', (b) => (log += b));
   await waitUp();
+  for (let i = 0; i < 50 && !/설정 코드: \S+/.test(log); i += 1) {
+    await new Promise((r) => setTimeout(r, 100));
+  }
+  const code = /설정 코드: (\S+)/.exec(log)?.[1] ?? '';
 
   // 새 데이터 폴더라 계정이 없다. 만들지 않으면 전부 503이다.
   const res = await fetch(`${BASE}/auth/setup`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ username: USER, password: PASS }),
+    body: JSON.stringify({ username: USER, password: PASS, code }),
   });
   token = ((await res.json()) as { token: string }).token;
 });

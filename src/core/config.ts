@@ -69,18 +69,42 @@ export const config = {
 
   /** 분당 요청 상한. 무차별 대입을 늦춘다. */
   rateLimit: Number(process.env.RELAY_RATE_LIMIT ?? 300),
+
+  /**
+   * IP당 분당 로그인·초기 설정 시도 상한.
+   *
+   * 예전에는 일반 요청과 같은 300을 써서 틀린 비밀번호 40번이 그대로
+   * 통과했다. 사람이 틀리는 횟수로는 10이면 넉넉하다.
+   */
+  loginLimit: Number(process.env.RELAY_LOGIN_LIMIT ?? 10),
+
+  /**
+   * 리버스 프록시(Caddy·nginx 등) 뒤에 둘 때 켠다. Express의 trust proxy 값이다.
+   *
+   * 끄면 모든 요청이 프록시 IP로 보여, 시도 제한이 한 사람에게 걸리면
+   * 모두가 막힌다. 켜면 X-Forwarded-For를 믿으므로 프록시 없이 켜면 안
+   * 된다 — 누구나 헤더로 IP를 바꿔 제한을 피한다. 보통은 1(프록시 한 단).
+   */
+  trustProxy: process.env.RELAY_TRUST_PROXY ?? '',
 } as const;
+
+/**
+ * 레거시 클라이언트 키를 받을지.
+ *
+ * 로그인 없이 셸까지 모든 경로를 여는 마스터 키다. 인터넷에 열린 서버에서
+ * 짧으면 대입으로 뚫린다. 24자보다 짧으면 아예 받지 않는다.
+ */
+export const CLIENT_KEY_MIN = 24;
+export const clientKeyUsable = config.clientKey.length >= CLIENT_KEY_MIN;
 
 /** 설정이 위험한 상태면 알려준다. */
 export function warnings(): string[] {
   const out: string[] = [];
   if (!config.agentToken) {
-    out.push('RELAY_AGENT_TOKEN이 없습니다. 누구나 agent로 붙을 수 있습니다.');
+    out.push('RELAY_AGENT_TOKEN이 없어 agent 접속을 받지 않습니다.');
   }
-  if (!config.clientKey) {
-    out.push('RELAY_CLIENT_KEY가 없습니다. 누구나 세션을 조작할 수 있습니다.');
-  } else if (config.clientKey.length < 24) {
-    out.push('RELAY_CLIENT_KEY가 짧습니다. 24자 이상을 권합니다.');
+  if (config.clientKey && !clientKeyUsable) {
+    out.push(`RELAY_CLIENT_KEY가 ${CLIENT_KEY_MIN}자보다 짧아 받지 않습니다. openssl rand -hex 24 로 바꾸세요.`);
   }
   if (config.agentToken && config.agentToken.length < 24) {
     out.push('RELAY_AGENT_TOKEN이 짧습니다. 24자 이상을 권합니다.');
