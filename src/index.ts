@@ -22,7 +22,12 @@ import { globalLoginFailures, logAuthFailure, loginLimiter, rateLimiter, safeEqu
 import { auth, AuthError } from './core/auth.js';
 import { publish, subscribe, subscriberCount } from './core/events.js';
 import { toNotification } from './core/hook.js';
+import { snippets, SnippetError } from './core/snippets.js';
+import { Scheduler } from './core/scheduler.js';
 import { firstRunGuide } from './core/guide.js';
+
+/** 예약한 명령을 주기마다 돌린다. 서버가 뜨면 start한다. */
+const scheduler = new Scheduler(termAgents);
 
 const app = express();
 
@@ -156,7 +161,7 @@ function isProtected(p: string): boolean {
   if (/^\/auth\/(status|setup|login|logout)$/.test(p)) return false;
   // terminals를 빠뜨리면 셸이 무인증으로 열린다. 반드시 포함해야 한다.
   // health도 막는다 — 응답에 allowedRoots(서버 경로)가 들어 있다.
-  return /^\/(sessions|workspaces|jobs|files|terminals|health|checklist|notifications|motd|auth|events)\b/.test(p);
+  return /^\/(sessions|workspaces|jobs|files|terminals|sys|run|snippets|health|checklist|notifications|motd|auth|events)\b/.test(p);
 }
 
 /**
@@ -463,6 +468,93 @@ app.delete('/checklist/:itemId', (req, res) => {
   res.status(removed ? 204 : 404).end();
 });
 
+/*
+ * 미리 등록한 명령(스니펫).
+ *
+ * 안경은 입력이 탭·스크롤 네 가지뿐이라 명령을 적어 넣을 수 없다.
+ * 웹에서 등록하고 안경에서는 골라 실행한다.
+ *
+ * 목록은 이 서버가 들고 실행은 terminal-agent가 한다. 맥이 꺼져 있어도
+ * 목록은 남아야 켜고 나서 바로 고를 수 있다.
+ *
+ * 훅 키로는 손대지 못한다. 알림 훅과 정반대 성격이다 — 여기는 임의
+ * 명령을 실행하는 문이라 로그인한 사람만 다뤄야 한다.
+ */
+
+app.get('/snippets', (_req, res) => {
+  res.json({ items: snippets.list() });
+});
+
+app.post('/snippets', (req, res) => {
+  const b = (req.body ?? {}) as Record<string, unknown>;
+  const item = snippets.add({
+    label: typeof b.label === 'string' ? b.label : undefined,
+    command: String(b.command ?? ''),
+    dir: typeof b.dir === 'string' ? b.dir : undefined,
+    kind: b.kind === 'cron' ? 'cron' : 'once',
+    everyMinutes: typeof b.everyMinutes === 'number' ? b.everyMinutes : undefined,
+    notifyOn:
+      b.notifyOn === 'always' || b.notifyOn === 'never' || b.notifyOn === 'change'
+        ? b.notifyOn
+        : undefined,
+  });
+  res.status(201).json({ item, items: snippets.list() });
+});
+
+app.patch('/snippets/:id', (req, res) => {
+  const item = snippets.update(req.params.id, (req.body ?? {}) as never);
+  if (!item) {
+    res.status(404).json({ error: { code: 'not_found', message: '없는 명령입니다.' } });
+    return;
+  }
+  res.json({ item });
+});
+
+app.delete('/snippets/:id', (req, res) => {
+  res.status(snippets.remove(req.params.id) ? 204 : 404).end();
+});
+
+/**
+ * 등록한 명령을 실행한다.
+ *
+ * 실행 자체는 terminal-agent가 한다. 되돌릴 수 없어 보이는 명령은
+ * 그쪽이 409로 막고, 사용자가 확인하면 confirm을 실어 다시 보낸다.
+ */
+app.post('/snippets/:id/run', async (req, res) => {
+  const item = snippets.get(req.params.id);
+  if (!item) {
+    res.status(404).json({ error: { code: 'not_found', message: '없는 명령입니다.' } });
+    return;
+  }
+
+  const agent = termAgents.default();
+  if (!agent) {
+    res.status(503).json({
+      error: { code: 'no_agent', message: '연결된 terminal-agent가 없습니다. 맥에서 실행하세요.' },
+    });
+    return;
+  }
+
+  const confirm = (req.body as { confirm?: unknown })?.confirm === true;
+
+  try {
+    const reply = await agent.request(
+      'POST',
+      '/run',
+      JSON.stringify({ command: item.command, dir: item.dir, confirm }),
+    );
+
+    // 성공했으면 결과를 적어 둔다. 예약 실행이 변화를 견주는 데 쓴다.
+    if (reply.status === 200) {
+      const parsed = JSON.parse(reply.body) as { output?: string; exitCode?: number };
+      snippets.recordRun(item.id, parsed.output ?? '', parsed.exitCode ?? -1);
+    }
+    res.status(reply.status).type('application/json').send(reply.body);
+  } catch (err) {
+    res.status(502).json({ error: { code: 'agent_error', message: (err as Error).message } });
+  }
+});
+
 // --- 알림 ---
 //
 // 완료·오류 알림을 쌓아둔다. 안경에서 한 번 놓쳐도 나중에 다시 볼 수 있다.
@@ -711,6 +803,11 @@ app.get(/^\/terminals\b.*\/stream$/, (req, res) => forwardStream(termAgents, req
 app.get(/\/stream$/, (req, res) => forwardStream(agents, req, res));
 
 app.all(/^\/terminals\b/, (req, res) => void forward(termAgents, 'terminal-agent', req, res));
+// 시스템 상태(top·ps 요약)도 terminal-agent가 갖고 있다. 맥 안의
+// 정보이므로 셸을 여는 쪽과 같은 agent에 둔다.
+app.all(/^\/sys\b/, (req, res) => void forward(termAgents, 'terminal-agent', req, res));
+// 한 번 실행하고 끝나는 명령. 스니펫 실행이 여기로 온다.
+app.all(/^\/run\b/, (req, res) => void forward(termAgents, 'terminal-agent', req, res));
 // /health는 agent-cli 쪽 것을 넘긴다. 웹이 여기서 allowedRoots를 받아
 // 워크스페이스 추가 화면에 보여준다. 중계하지 않으면 404가 난다.
 app.all(/^\/(sessions|workspaces|jobs|files|health)\b/, (req, res) => void forward(agents, 'agent-cli', req, res));
@@ -730,7 +827,7 @@ if (fs.existsSync(config.webRoot)) {
 // 안경앱은 루트에 둔다. G2가 QR로 루트를 열기 때문이다.
 if (fs.existsSync(config.glassesRoot)) {
   app.use(express.static(config.glassesRoot));
-  app.get(/^(?!\/(relay|auth|sessions|workspaces|jobs|files|terminals|health|web)\b).*/, (req, res, next) => {
+  app.get(/^(?!\/(relay|auth|sessions|workspaces|jobs|files|terminals|sys|run|snippets|health|web)\b).*/, (req, res, next) => {
     if (req.method !== 'GET') return next();
     res.sendFile(path.join(config.glassesRoot, 'index.html'));
   });
@@ -747,6 +844,10 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   }
   if (err instanceof ChecklistError) {
     res.status(400).json({ error: { code: 'checklist_error', message: err.message } });
+    return;
+  }
+  if (err instanceof SnippetError) {
+    res.status(400).json({ error: { code: 'snippet_error', message: err.message } });
     return;
   }
   // 내부 오류 문구에는 경로나 내부 사정이 섞인다. 밖에는 알리지 않고 로그로 남긴다.
@@ -849,11 +950,17 @@ server.listen(config.port, config.host, () => {
   for (const w of warnings()) console.warn(`[relay] 경고: ${w}`);
   // 계정이 없으면 서버가 잠겨 있다. 무엇을 해야 하는지 로그에서 바로 보이게 한다.
   if (!auth.isConfigured) console.log(`\n${firstRunGuide(auth.setupCode).map((l) => (l ? `[relay] ${l}` : '[relay]')).join('\n')}\n`);
+
+  // 예약한 명령을 돌린다. 등록된 것이 없으면 아무 일도 하지 않는다.
+  scheduler.start();
+  const cron = snippets.list().filter((x) => x.kind === 'cron').length;
+  if (cron > 0) console.log(`[relay] 예약 명령 ${cron}건을 주기마다 돌립니다.`);
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     console.log(`\n[relay] ${sig} 수신, 종료합니다.`);
+    scheduler.stop();
     server.close(() => process.exit(0));
   });
 }
