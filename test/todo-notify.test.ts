@@ -41,7 +41,10 @@ async function waitUp(): Promise<void> {
 
 test.before(async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'todo-notify-'));
-  proc = spawn('npx', ['tsx', 'src/index.ts'], {
+  // npx를 거치지 않고 서버를 직접 띄운다. npx로 띄우면 kill이 npx만
+  // 끝내고 서버(자식)는 살아남아 stdout 파이프를 붙잡는다. 그러면 리눅스
+  // CI에서 테스트 프로세스가 파이프가 닫히기를 기다리며 끝나지 않았다.
+  proc = spawn(process.execPath, ['--import', 'tsx', 'src/index.ts'], {
     env: {
       ...process.env,
       PORT: String(PORT),
@@ -70,7 +73,10 @@ test.before(async () => {
   token = ((await res.json()) as { token: string }).token;
 });
 
-test.after(() => proc?.kill());
+test.after(() => {
+  proc?.kill();
+  proc?.stdout?.destroy();
+});
 
 function api(p: string, init: RequestInit = {}): Promise<Response> {
   return fetch(`${BASE}${p}`, {
