@@ -5,6 +5,8 @@ import {
   api,
   getToken,
   setToken,
+  SIGNED_OUT_EVENT,
+  TOKEN_STORAGE,
   getApiKey,
   getDeleteOriginalOnResume,
   setApiKey,
@@ -55,6 +57,21 @@ export function App() {
   /** 접속 직후 한 번 보여주는 서버 상태 배너. */
   const [motd, setMotd] = useState<string[]>([]);
   const [username, setUsername] = useState('');
+
+  // 로그인은 안경앱 폰 화면(`/`)과 함께 쓴다. 401이 나거나 다른 탭·화면에서
+  // 로그인·로그아웃하면 그대로 따라간다.
+  useEffect(() => {
+    const onSignedOut = () => setSignedIn(false);
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === null || e.key === TOKEN_STORAGE) setSignedIn(Boolean(getToken()));
+    };
+    window.addEventListener(SIGNED_OUT_EVENT, onSignedOut);
+    window.addEventListener('storage', onStorage);
+    return () => {
+      window.removeEventListener(SIGNED_OUT_EVENT, onSignedOut);
+      window.removeEventListener('storage', onStorage);
+    };
+  }, []);
   const [tab, setTab] = useState<Tab>('sessions');
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);

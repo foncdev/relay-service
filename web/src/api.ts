@@ -98,7 +98,20 @@ export interface TerminalInfo {
 }
 
 const KEY_STORAGE = 'agent-cli.apiKey';
-const TOKEN_STORAGE = 'agent-cli.token';
+
+/**
+ * 로그인 토큰을 두는 곳. 안경앱 폰 화면(`/`)과 같은 이름을 쓴다.
+ *
+ * 둘은 같은 주소(ip:4100)에서 열리므로 브라우저 저장소를 함께 쓴다.
+ * 예전에는 이름이 하이픈 하나 달라서(agent-cli.token / agentcli.token)
+ * 한쪽에서 로그인해도 다른 쪽은 다시 로그인해야 했다.
+ */
+export const TOKEN_STORAGE = 'relay.token';
+/** 예전 이름. 읽기만 하고, 새로 저장할 때 지운다. */
+const OLD_TOKEN_STORAGE = ['agent-cli.token', 'agentcli.token'];
+
+/** 로그인이 풀렸을 때(401, 다른 탭에서 로그아웃) 알리는 이벤트. */
+export const SIGNED_OUT_EVENT = 'relay:signed-out';
 
 /**
  * 로그인 토큰.
@@ -108,7 +121,11 @@ const TOKEN_STORAGE = 'agent-cli.token';
  */
 export function getToken(): string {
   try {
-    return localStorage.getItem(TOKEN_STORAGE) ?? '';
+    for (const key of [TOKEN_STORAGE, ...OLD_TOKEN_STORAGE]) {
+      const v = localStorage.getItem(key);
+      if (v) return v;
+    }
+    return '';
   } catch {
     return '';
   }
@@ -118,6 +135,7 @@ export function setToken(token: string): void {
   try {
     if (token) localStorage.setItem(TOKEN_STORAGE, token);
     else localStorage.removeItem(TOKEN_STORAGE);
+    for (const key of OLD_TOKEN_STORAGE) localStorage.removeItem(key);
   } catch {
     // 저장 못 해도 이번 세션에는 동작한다.
   }
@@ -187,6 +205,14 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
     body = text ? JSON.parse(text) : {};
   } catch {
     body = {};
+  }
+
+  // 토큰이 만료되거나 다른 곳에서 로그아웃했다. 로그인이 함께 쓰이므로
+  // 남은 토큰을 지우고 로그인 화면으로 돌린다. 예전에는 로그인된 채로
+  // 오류만 쌓였다.
+  if (res.status === 401 && token) {
+    setToken('');
+    window.dispatchEvent(new Event(SIGNED_OUT_EVENT));
   }
 
   if (!res.ok) {
