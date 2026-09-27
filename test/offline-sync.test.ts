@@ -48,6 +48,8 @@ test.before(async () => {
       RELAY_CLIENT_KEY: 'k',
       RELAY_AGENT_TOKEN: 't',
       RELAY_TERMINAL_TOKEN: 't',
+      // 테스트 서버를 같은 와이파이에 알리지 않는다. 폰이 진짜 서버로 착각한다.
+      RELAY_BONJOUR: 'false',
     },
     stdio: ['ignore', 'pipe', 'ignore'],
   });

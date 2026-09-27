@@ -40,6 +40,8 @@ async function startServer(env: Record<string, string> = {}) {
       RELAY_CLIENT_KEY: '',
       RELAY_HOOK_KEY: '',
       RELAY_GLASSES_ROOT: path.join(dir, 'none'),
+      // 테스트 서버를 같은 와이파이에 알리지 않는다. 폰이 진짜 서버로 착각한다.
+      RELAY_BONJOUR: 'false',
       ...env,
     },
     stdio: ['ignore', 'pipe', 'pipe'],

@@ -77,7 +77,7 @@ export function Login({ onDone }: { onDone: (username: string) => void }) {
         <p className="hint">
           {isSetup
             ? '관리자 계정을 만듭니다. 서버 시작 로그에 찍힌 설정 코드가 필요합니다. 이 계정으로 에이전트를 제어하므로 비밀번호를 신중히 정하세요.'
-            : 'Relay 서버에 로그인합니다.'}
+            : 'relay-service 관리자 계정으로 로그인합니다. G2 안경은 이 계정이 아니라 폰 Relay 앱의 접속 키로 들어갑니다.'}
         </p>
 
         {/* 설정 코드는 서버 로그에만 찍힌다. 로그를 볼 수 있는 사람만 계정을 만든다. */}

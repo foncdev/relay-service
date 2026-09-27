@@ -24,7 +24,11 @@ import { publish, subscribe, subscriberCount } from './core/events.js';
 import { toNotification } from './core/hook.js';
 import { snippets, SnippetError } from './core/snippets.js';
 import { Scheduler } from './core/scheduler.js';
+import { advertise, serviceName } from './core/bonjour.js';
 import { firstRunGuide } from './core/guide.js';
+
+/** 같은 와이파이의 폰이 이 서버를 찾게 알린다. 멈출 때 부른다. */
+let stopAdvertising = (): void => undefined;
 
 /** 예약한 명령을 주기마다 돌린다. 서버가 뜨면 start한다. */
 const scheduler = new Scheduler(termAgents);
@@ -982,12 +986,19 @@ server.listen(config.port, config.host, () => {
   scheduler.start();
   const cron = snippets.list().filter((x) => x.kind === 'cron').length;
   if (cron > 0) console.log(`[relay] 예약 명령 ${cron}건을 주기마다 돌립니다.`);
+
+  // 폰이 맥 IP가 바뀌어도 이 서버를 찾게 알린다(맥에서만).
+  stopAdvertising = advertise(config.port);
+  if (process.platform === 'darwin' && process.env.RELAY_BONJOUR !== 'false') {
+    console.log(`[relay] 같은 와이파이에 알림: ${serviceName()}`);
+  }
 });
 
 for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     console.log(`\n[relay] ${sig} 수신, 종료합니다.`);
     scheduler.stop();
+    stopAdvertising();
     server.close(() => process.exit(0));
     // 실시간 연결(SSE·스트림)은 스스로 끝나지 않는다. close만 하면 안경·폰이
     // 붙어 있는 동안 종료가 멈춘 채 남고, 붙은 쪽은 서버가 살아 있다고 여긴다.

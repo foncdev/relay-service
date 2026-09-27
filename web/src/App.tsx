@@ -710,7 +710,7 @@ function SettingsModal({
   return (
     <Modal title="설정" onClose={onClose}>
       <div className="field">
-        <label>API 키</label>
+        <label>예전 API 키 (선택)</label>
         <input
           autoFocus
           type="password"
@@ -719,7 +719,8 @@ function SettingsModal({
           placeholder="서버의 AGENT_API_KEY"
         />
         <span className="hint">
-          브라우저에만 저장됩니다. 서버에 AGENT_API_KEY가 없으면 비워두세요.
+          계정으로 로그인했으면 비워 두세요. 계정이 생기기 전의 방식(AGENT_API_KEY)을 쓰는
+          서버와 맞추려고 남겨 둔 칸입니다. 브라우저에만 저장됩니다.
         </span>
       </div>
 
