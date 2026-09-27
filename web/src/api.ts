@@ -346,6 +346,9 @@ export const api = {
       method: 'POST',
       ...json({}),
     }),
+  /** ids 순서로 앞에 놓는다. 적지 않은 항목은 원래 순서로 뒤에 남는다. */
+  reorderGlobalChecklist: (ids: string[]) =>
+    request<{ items: ChecklistItem[] }>('/checklist/order', { method: 'POST', ...json({ ids }) }),
 
   // --- 세션별 체크리스트 ---
   getChecklist: (id: string) =>
@@ -373,6 +376,11 @@ export const api = {
       `/sessions/${id}/checklist/clear-done`,
       { method: 'POST', ...json({}) },
     ),
+  reorderChecklist: (id: string, ids: string[]) =>
+    request<{ items: ChecklistItem[] }>(`/sessions/${id}/checklist/order`, {
+      method: 'POST',
+      ...json({ ids }),
+    }),
 
   // --- 파일 ---
   listFiles: (wsId: string, path = '', hidden = false) =>

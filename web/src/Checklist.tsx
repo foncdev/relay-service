@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type ChecklistItem } from './api.js';
 
 /**
@@ -27,6 +27,7 @@ export function Checklist({
         update: (id: string, t: string) => api.updateChecklist(sessionId, id, t),
         remove: (id: string) => api.deleteChecklist(sessionId, id),
         clear: () => api.clearDoneChecklist(sessionId),
+        reorder: (ids: string[]) => api.reorderChecklist(sessionId, ids),
       }
     : {
         get: () => api.getGlobalChecklist(),
@@ -35,6 +36,7 @@ export function Checklist({
         update: (id: string, t: string) => api.updateGlobalChecklist(id, t),
         remove: (id: string) => api.deleteGlobalChecklist(id),
         clear: () => api.clearDoneGlobalChecklist(),
+        reorder: (ids: string[]) => api.reorderGlobalChecklist(ids),
       }),
     [sessionId],
   );
@@ -43,8 +45,14 @@ export function Checklist({
   const [busy, setBusy] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState('');
+  // 끌고 있는 항목과 놓일 자리(그 앞에 놓을 줄 번호, 끝이면 items.length).
+  const [drag, setDrag] = useState<{ id: string; target: number } | null>(null);
+  const dragging = useRef(false);
+  const rows = useRef(new Map<string, HTMLDivElement>());
 
   const load = useCallback(async () => {
+    // 끄는 도중에 새로 읽으면 줄이 바뀌어 놓을 자리가 어긋난다.
+    if (dragging.current) return;
     try {
       const { items: list } = await ops.get();
       setItems(list);
@@ -122,7 +130,44 @@ export function Checklist({
     }
   }
 
+  /** from 항목을 target 줄 앞으로 옮긴다. 화면을 먼저 바꾸고 서버 순서로 맞춘다. */
+  async function move(id: string, target: number): Promise<void> {
+    const from = items.findIndex((i) => i.id === id);
+    if (from < 0) return;
+    const to = target > from ? target - 1 : target;
+    if (to === from) return;
+    const next = [...items];
+    const [item] = next.splice(from, 1);
+    next.splice(to, 0, item!);
+    setItems(next);
+    try {
+      const { items: saved } = await ops.reorder(next.map((i) => i.id));
+      setItems(saved);
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : '순서 변경 실패', true);
+      void load();
+    }
+  }
+
+  /** 포인터 높이에서 놓일 자리를 찾는다. 줄 가운데보다 위면 그 줄 앞이다. */
+  function targetAt(y: number): number {
+    for (let n = 0; n < items.length; n += 1) {
+      const rect = rows.current.get(items[n]!.id)?.getBoundingClientRect();
+      if (rect && y < rect.top + rect.height / 2) return n;
+    }
+    return items.length;
+  }
+
+  function endDrag(commit: boolean): void {
+    if (commit && drag) void move(drag.id, drag.target);
+    dragging.current = false;
+    setDrag(null);
+  }
+
   const done = items.filter((i) => i.done).length;
+  // 제자리(자기 앞·바로 뒤)에 놓으면 바뀌는 것이 없다. 선을 보이지 않는다.
+  const dragFrom = drag ? items.findIndex((i) => i.id === drag.id) : -1;
+  const dropAt = drag && drag.target !== dragFrom && drag.target !== dragFrom + 1 ? drag.target : null;
 
   return (
     <div className="checklist">
@@ -150,8 +195,54 @@ export function Checklist({
           </div>
         )}
 
-        {items.map((item) => (
-          <div key={item.id} className={`todo${item.done ? ' done' : ''}`}>
+        {items.map((item, n) => (
+          <div
+            key={item.id}
+            ref={(el) => {
+              if (el) rows.current.set(item.id, el);
+              else rows.current.delete(item.id);
+            }}
+            className={[
+              'todo',
+              item.done ? 'done' : '',
+              drag?.id === item.id ? 'dragging' : '',
+              dropAt === n ? 'drop-before' : '',
+              dropAt === items.length && n === items.length - 1 ? 'drop-after' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            {/*
+              손잡이. 마우스·터치 모두 포인터 이벤트로 끈다(HTML 끌어놓기는 터치에서 안 된다).
+              키보드로는 위·아래 화살표로 한 칸씩 옮긴다.
+            */}
+            <button
+              className="todo-handle"
+              title="끌어서 순서 바꾸기 (↑↓)"
+              aria-label={`순서 바꾸기: ${item.text}`}
+              disabled={items.length < 2}
+              onPointerDown={(e) => {
+                e.currentTarget.setPointerCapture(e.pointerId);
+                dragging.current = true;
+                setDrag({ id: item.id, target: n });
+              }}
+              onPointerMove={(e) => {
+                if (drag?.id === item.id) setDrag({ id: item.id, target: targetAt(e.clientY) });
+              }}
+              onPointerUp={() => endDrag(true)}
+              onPointerCancel={() => endDrag(false)}
+              onKeyDown={(e) => {
+                if (e.key === 'ArrowUp' && n > 0) {
+                  e.preventDefault();
+                  void move(item.id, n - 1);
+                } else if (e.key === 'ArrowDown' && n < items.length - 1) {
+                  e.preventDefault();
+                  void move(item.id, n + 2);
+                }
+              }}
+            >
+              ⠿
+            </button>
             <input
               type="checkbox"
               checked={item.done}
