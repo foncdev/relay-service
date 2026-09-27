@@ -150,6 +150,22 @@ test('할 일: 순서를 바꾸면 목록이 그 순서다', async () => {
   assert.equal(bad.status, 400);
 });
 
+test('세션 할 일: 순서를 바꾸면 그 세션 목록만 바뀐다', async () => {
+  const session = `s-${randomUUID()}`;
+  const ids = [randomUUID(), randomUUID()];
+  for (const [n, id] of ids.entries()) {
+    await api(`/sessions/${session}/checklist`, { method: 'POST', body: JSON.stringify({ id, text: `세션 일 ${n}` }) });
+  }
+  const res = await api(`/sessions/${session}/checklist/order`, {
+    method: 'POST',
+    body: JSON.stringify({ ids: [ids[1], ids[0]] }),
+  });
+  assert.equal(res.status, 200);
+  const { items } = (await (await api(`/sessions/${session}/checklist`)).json()) as { items: { id: string }[] };
+  assert.deepEqual(items.map((i) => i.id), [ids[1], ids[0]]);
+  assert.ok(!(await todos()).some((t) => ids.includes(t.id)), '전역 목록에 섞였다');
+});
+
 test('명령: 폰이 정한 id로 두 번 보내도 하나만 생긴다', async () => {
   const id = randomUUID();
   const send = () => api('/snippets', { method: 'POST', body: JSON.stringify({ id, label: '디스크', command: 'df -h' }) });

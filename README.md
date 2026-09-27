@@ -294,6 +294,8 @@ POST       /notifications/{id}/read
 DELETE     /notifications/{id}
 
 GET|POST   /sessions/{id}/checklist    세션별 체크리스트
+POST       /sessions/{id}/checklist/clear-done · /order · /{itemId}/toggle
+PATCH|DELETE /sessions/{id}/checklist/{itemId}
 ```
 
 ### 시스템 상태와 명령
