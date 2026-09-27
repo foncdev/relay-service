@@ -39,6 +39,9 @@ function safeId(id: string): string {
 
 export class ChecklistError extends Error {}
 
+/** 폰이 정해 보내는 id. uuid를 쓰지만 모양만 막는다(파일에 그대로 들어간다). */
+export const CLIENT_ID = /^[A-Za-z0-9_-]{8,64}$/;
+
 function filePath(sessionId: string): string {
   return path.join(DIR, `${safeId(sessionId)}.json`);
 }
@@ -101,6 +104,30 @@ export class ChecklistStore {
     items.push(...added);
     this.save(sessionId, items);
     return added;
+  }
+
+  /**
+   * 폰이 정한 id로 하나를 넣는다. 같은 id가 이미 있으면 그대로 둔다.
+   *
+   * 폰은 오프라인에서 만든 할 일을 나중에 보낸다. 보내다 끊기면 같은
+   * 요청을 다시 보내게 되는데, 그때 두 번 생기면 안 된다. id를 폰이
+   * 정하면 다시 보내도 하나로 남는다.
+   */
+  addWithId(sessionId: string, id: string, text: string): { item: ChecklistItem; created: boolean } {
+    if (!CLIENT_ID.test(id)) throw new ChecklistError('잘못된 id입니다.');
+    const items = this.list(sessionId);
+    const existing = items.find((i) => i.id === id);
+    if (existing) return { item: existing, created: false };
+
+    const line = text.replace(/\s*\n\s*/g, ' ').trim().slice(0, MAX_TEXT);
+    if (!line) throw new ChecklistError('추가할 내용이 없습니다.');
+    if (items.length + 1 > MAX_ITEMS) {
+      throw new ChecklistError(`할 일은 세션당 ${MAX_ITEMS}개까지입니다.`);
+    }
+    const item: ChecklistItem = { id, text: line, done: false, createdAt: new Date().toISOString() };
+    items.push(item);
+    this.save(sessionId, items);
+    return { item, created: true };
   }
 
   /** 완료 여부를 바꾼다. done을 생략하면 뒤집는다. */

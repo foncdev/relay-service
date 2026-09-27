@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
+import { CLIENT_ID } from './checklist.js';
 
 /**
  * 미리 등록해 두는 명령.
@@ -76,6 +77,8 @@ export class SnippetStore {
   }
 
   add(input: {
+    /** 폰이 정한 id. 없으면 여기서 만든다. */
+    id?: string;
     label?: string;
     command: string;
     dir?: string;
@@ -85,6 +88,7 @@ export class SnippetStore {
   }): Snippet {
     const command = input.command.trim().slice(0, MAX_COMMAND);
     if (!command) throw new SnippetError('명령이 비었습니다.');
+    if (input.id !== undefined && !CLIENT_ID.test(input.id)) throw new SnippetError('잘못된 id입니다.');
 
     // 이름을 안 주면 명령 앞부분을 쓴다. 목록에 빈 줄이 생기지 않게.
     const label = (input.label?.trim() || command).slice(0, MAX_LABEL);
@@ -96,7 +100,7 @@ export class SnippetStore {
 
     const kind: SnippetKind = input.kind === 'cron' ? 'cron' : 'once';
     const item: Snippet = {
-      id: randomUUID(),
+      id: input.id ?? randomUUID(),
       label,
       command,
       dir: input.dir?.trim() || undefined,

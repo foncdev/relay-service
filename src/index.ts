@@ -417,6 +417,14 @@ app.post('/checklist', (req, res) => {
     res.status(400).json({ error: { code: 'empty_text', message: '추가할 내용이 없습니다.' } });
     return;
   }
+  const id = (req.body as { id?: unknown })?.id;
+  // 폰이 id를 정해 보내면 하나만 넣고, 같은 id를 다시 보내도 늘지 않는다.
+  if (typeof id === 'string') {
+    const { item, created } = checklists.addWithId(GLOBAL_LIST, id, text);
+    if (created) notifyTodo(`할 일 추가: ${item.text}`, '');
+    res.status(created ? 201 : 200).json({ added: created ? [item] : [], items: checklists.list(GLOBAL_LIST) });
+    return;
+  }
   const added = checklists.addMany(GLOBAL_LIST, text);
   if (added.length > 0) {
     notifyTodo(
@@ -434,7 +442,10 @@ app.post('/checklist/clear-done', (_req, res) => {
 });
 
 app.post('/checklist/:itemId/toggle', (req, res) => {
-  const item = checklists.toggle(GLOBAL_LIST, req.params.itemId);
+  // done을 주면 그 값으로 맞춘다. 뒤집기만 하면 오프라인에서 모아 둔 변경을
+  // 다시 보낼 때 거꾸로 뒤집힐 수 있다.
+  const done = (req.body as { done?: unknown })?.done;
+  const item = checklists.toggle(GLOBAL_LIST, req.params.itemId, typeof done === 'boolean' ? done : undefined);
   if (!item) {
     res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
     return;
@@ -487,7 +498,16 @@ app.get('/snippets', (_req, res) => {
 
 app.post('/snippets', (req, res) => {
   const b = (req.body ?? {}) as Record<string, unknown>;
+  // 폰이 정한 id가 이미 있으면 그대로 돌려준다. 오프라인에서 만든 것을 다시 보내도 하나로 남는다.
+  if (typeof b.id === 'string') {
+    const existing = snippets.get(b.id);
+    if (existing) {
+      res.json({ item: existing, items: snippets.list() });
+      return;
+    }
+  }
   const item = snippets.add({
+    id: typeof b.id === 'string' ? b.id : undefined,
     label: typeof b.label === 'string' ? b.label : undefined,
     command: String(b.command ?? ''),
     dir: typeof b.dir === 'string' ? b.dir : undefined,
@@ -629,6 +649,13 @@ app.post('/sessions/:id/checklist', (req, res) => {
   const text = String((req.body as { text?: unknown })?.text ?? '');
   if (!text.trim()) {
     res.status(400).json({ error: { code: 'empty_text', message: '추가할 내용이 없습니다.' } });
+    return;
+  }
+  const clientId = (req.body as { id?: unknown })?.id;
+  if (typeof clientId === 'string') {
+    const { item, created } = checklists.addWithId(req.params.id, clientId, text);
+    if (created) notifyTodo(`할 일 추가: ${item.text}`, '', req.params.id);
+    res.status(created ? 201 : 200).json({ added: created ? [item] : [], items: checklists.list(req.params.id) });
     return;
   }
   const added = checklists.addMany(req.params.id, text);
