@@ -989,5 +989,10 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
     console.log(`\n[relay] ${sig} 수신, 종료합니다.`);
     scheduler.stop();
     server.close(() => process.exit(0));
+    // 실시간 연결(SSE·스트림)은 스스로 끝나지 않는다. close만 하면 안경·폰이
+    // 붙어 있는 동안 종료가 멈춘 채 남고, 붙은 쪽은 서버가 살아 있다고 여긴다.
+    server.closeAllConnections();
+    // 웹소켓(agent)처럼 따로 떼어 간 연결이 남아도 오래 붙잡지 않는다.
+    setTimeout(() => process.exit(0), 3000).unref();
   });
 }

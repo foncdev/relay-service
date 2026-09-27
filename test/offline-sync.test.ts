@@ -142,3 +142,19 @@ test('명령: 폰이 정한 id로 두 번 보내도 하나만 생긴다', async 
   const { items } = (await (await api('/snippets')).json()) as { items: { id: string }[] };
   assert.equal(items.filter((s) => s.id === id).length, 1);
 });
+
+test('끌 때 실시간 연결이 열려 있어도 곧 끝난다', async () => {
+  // 열린 SSE를 기다리면 종료가 멈추고, 폰은 서버가 살아 있다고 여긴다.
+  const ac = new AbortController();
+  const res = await fetch(`${BASE}/events?token=${encodeURIComponent(token)}`, { signal: ac.signal });
+  const reader = res.body!.getReader();
+  await reader.read();
+
+  const exited = new Promise<number>((resolve) => proc.once('exit', () => resolve(Date.now())));
+  const start = Date.now();
+  proc.kill('SIGTERM');
+  const end = await Promise.race([exited, new Promise<number>((r) => setTimeout(() => r(-1), 5000))]);
+  ac.abort();
+  assert.ok(end > 0, '5초가 지나도 서버가 끝나지 않았다');
+  assert.ok(end - start < 4000, `${end - start}ms 걸렸다`);
+});
