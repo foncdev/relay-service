@@ -136,6 +136,20 @@ test('할 일: 완료를 값으로 정하면 다시 보내도 그대로다', asy
   assert.equal((await todos()).find((t) => t.id === id)?.done, true);
 });
 
+test('할 일: 순서를 바꾸면 목록이 그 순서다', async () => {
+  const ids = [randomUUID(), randomUUID()];
+  for (const [n, id] of ids.entries()) {
+    await api('/checklist', { method: 'POST', body: JSON.stringify({ id, text: `순서 ${n}` }) });
+  }
+  const res = await api('/checklist/order', { method: 'POST', body: JSON.stringify({ ids: [ids[1], ids[0]] }) });
+  assert.equal(res.status, 200);
+  const order = (await todos()).map((t) => t.id).filter((i) => ids.includes(i));
+  assert.deepEqual(order, [ids[1], ids[0]]);
+
+  const bad = await api('/checklist/order', { method: 'POST', body: JSON.stringify({ ids: 'x' }) });
+  assert.equal(bad.status, 400);
+});
+
 test('명령: 폰이 정한 id로 두 번 보내도 하나만 생긴다', async () => {
   const id = randomUUID();
   const send = () => api('/snippets', { method: 'POST', body: JSON.stringify({ id, label: '디스크', command: 'df -h' }) });

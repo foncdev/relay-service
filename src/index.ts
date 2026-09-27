@@ -445,6 +445,17 @@ app.post('/checklist/clear-done', (_req, res) => {
   res.json({ removed, items: checklists.list(GLOBAL_LIST) });
 });
 
+// 순서 바꾸기. 알림은 남기지 않는다 — 내용이 바뀌지 않았고, 끌 때마다 쌓이면 시끄럽다.
+app.post('/checklist/order', (req, res) => {
+  const ids = (req.body as { ids?: unknown })?.ids;
+  if (!Array.isArray(ids) || ids.some((i) => typeof i !== 'string')) {
+    res.status(400).json({ error: { code: 'bad_ids', message: 'ids는 항목 id 배열이어야 합니다.' } });
+    return;
+  }
+  const items = checklists.reorder(GLOBAL_LIST, ids as string[]);
+  res.json({ items });
+});
+
 app.post('/checklist/:itemId/toggle', (req, res) => {
   // done을 주면 그 값으로 맞춘다. 뒤집기만 하면 오프라인에서 모아 둔 변경을
   // 다시 보낼 때 거꾸로 뒤집힐 수 있다.

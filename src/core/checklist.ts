@@ -160,6 +160,30 @@ export class ChecklistStore {
     return true;
   }
 
+  /**
+   * 순서를 바꾼다. ids에 적힌 순서대로 앞에 놓고, 적히지 않은 항목은
+   * 원래 순서대로 뒤에 둔다.
+   *
+   * 폰은 오프라인에서 끌어 옮긴 순서를 나중에 보낸다. 그 사이 다른 기기가
+   * 넣은 항목이 사라지면 안 되고, 없는 id는 무시해야 다시 보내도 같다.
+   */
+  reorder(sessionId: string, ids: string[]): ChecklistItem[] {
+    const items = this.list(sessionId);
+    const byId = new Map(items.map((i) => [i.id, i]));
+    const seen = new Set<string>();
+    const front: ChecklistItem[] = [];
+    for (const id of ids) {
+      const item = byId.get(id);
+      if (item && !seen.has(id)) {
+        seen.add(id);
+        front.push(item);
+      }
+    }
+    const next = [...front, ...items.filter((i) => !seen.has(i.id))];
+    if (next.some((item, n) => item !== items[n])) this.save(sessionId, next);
+    return next;
+  }
+
   /** 완료된 항목을 한꺼번에 치운다. */
   clearDone(sessionId: string): number {
     const items = this.list(sessionId);

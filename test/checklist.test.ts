@@ -76,3 +76,18 @@ test('빈 줄은 건너뛴다', () => {
     ['하나', '둘'],
   );
 });
+
+test('순서 바꾸기: 적은 순서가 앞에, 나머지는 원래 순서로 뒤에', () => {
+  const [a, b, c, d] = checklists.addMany(id, '가\n나\n다\n라');
+  const next = checklists.reorder(id, [c!.id, a!.id, 'no-such-id', c!.id]);
+
+  assert.deepEqual(next.map((i) => i.text), ['다', '가', '나', '라']);
+  assert.deepEqual(checklists.list(id).map((i) => i.id), [c!.id, a!.id, b!.id, d!.id], '저장되지 않았다');
+});
+
+test('순서 바꾸기: 같은 요청을 다시 보내도 같다', () => {
+  const [a, b] = checklists.addMany(id, '하나\n둘');
+  checklists.reorder(id, [b!.id, a!.id]);
+  checklists.reorder(id, [b!.id, a!.id]);
+  assert.deepEqual(checklists.list(id).map((i) => i.text), ['둘', '하나']);
+});
