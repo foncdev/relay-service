@@ -283,6 +283,7 @@ GET  /motd                 접속 직후 보여줄 서버 상태 요약
 GET|POST   /checklist                  전역 체크리스트
 POST       /checklist/clear-done
 POST       /checklist/order            순서 바꾸기 {ids: [...]}
+GET        /checklist/sessions         세션마다 남은 할 일 수 {counts: {세션id: 수}}
 POST       /checklist/{id}/toggle
 PATCH      /checklist/{id}
 DELETE     /checklist/{id}

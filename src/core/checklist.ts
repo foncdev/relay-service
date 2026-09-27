@@ -193,6 +193,28 @@ export class ChecklistStore {
     return removed;
   }
 
+  /**
+   * 세션마다 남은(완료하지 않은) 할 일 수. 전역 목록과 남은 것이 없는 세션은 뺀다.
+   * 폰의 세션 목록이 줄마다 보인다.
+   */
+  openCounts(): Record<string, number> {
+    const counts: Record<string, number> = {};
+    let files: string[] = [];
+    try {
+      files = fs.readdirSync(DIR);
+    } catch {
+      return counts;
+    }
+    for (const file of files) {
+      if (!file.endsWith('.json')) continue;
+      const id = file.slice(0, -5);
+      if (id === GLOBAL_LIST || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) continue;
+      const open = this.list(id).filter((i) => !i.done).length;
+      if (open > 0) counts[id] = open;
+    }
+    return counts;
+  }
+
   removeAll(sessionId: string): void {
     try {
       fs.unlinkSync(filePath(sessionId));

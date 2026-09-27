@@ -415,6 +415,11 @@ app.get('/checklist', (_req, res) => {
   res.json({ items: checklists.list(GLOBAL_LIST) });
 });
 
+// 세션마다 남은 할 일 수. /sessions는 agent-cli가 답해 거기에 붙일 수 없다.
+app.get('/checklist/sessions', (_req, res) => {
+  res.json({ counts: checklists.openCounts() });
+});
+
 app.post('/checklist', (req, res) => {
   const text = String((req.body as { text?: unknown })?.text ?? '');
   if (!text.trim()) {

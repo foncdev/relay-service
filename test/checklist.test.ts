@@ -91,3 +91,16 @@ test('순서 바꾸기: 같은 요청을 다시 보내도 같다', () => {
   checklists.reorder(id, [b!.id, a!.id]);
   assert.deepEqual(checklists.list(id).map((i) => i.text), ['둘', '하나']);
 });
+
+test('세션마다 남은 할 일 수: 완료는 빼고 남은 것이 없으면 싣지 않는다', () => {
+  const [a] = checklists.addMany(id, '하나\n둘');
+  checklists.toggle(id, a!.id, true);
+  const empty = `t-${randomUUID()}`;
+  const [only] = checklists.addMany(empty, '끝낸 일');
+  checklists.toggle(empty, only!.id, true);
+
+  const counts = checklists.openCounts();
+  assert.equal(counts[id], 1);
+  assert.equal(counts[empty], undefined);
+  assert.equal(counts.global, undefined);
+});

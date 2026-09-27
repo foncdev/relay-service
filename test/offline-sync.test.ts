@@ -164,6 +164,10 @@ test('세션 할 일: 순서를 바꾸면 그 세션 목록만 바뀐다', async
   const { items } = (await (await api(`/sessions/${session}/checklist`)).json()) as { items: { id: string }[] };
   assert.deepEqual(items.map((i) => i.id), [ids[1], ids[0]]);
   assert.ok(!(await todos()).some((t) => ids.includes(t.id)), '전역 목록에 섞였다');
+
+  // 세션 목록이 줄마다 보이는 남은 할 일 수.
+  const { counts } = (await (await api('/checklist/sessions')).json()) as { counts: Record<string, number> };
+  assert.equal(counts[session], 2);
 });
 
 test('명령: 폰이 정한 id로 두 번 보내도 하나만 생긴다', async () => {
