@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
+import { L } from './lang.js';
 
 /**
  * 세션별 할 일 목록.
@@ -32,7 +33,7 @@ export const GLOBAL_LIST = 'global';
  */
 function safeId(id: string): string {
   if (!/^[a-zA-Z0-9_-]{1,128}$/.test(id)) {
-    throw new ChecklistError('잘못된 세션 id입니다.');
+    throw new ChecklistError(L('잘못된 세션 id입니다.', 'Invalid session id.'));
   }
   return id;
 }
@@ -92,7 +93,7 @@ export class ChecklistStore {
 
     const items = this.list(sessionId);
     if (items.length + lines.length > MAX_ITEMS) {
-      throw new ChecklistError(`할 일은 세션당 ${MAX_ITEMS}개까지입니다.`);
+      throw new ChecklistError(L(`할 일은 세션당 ${MAX_ITEMS}개까지입니다.`, `Up to ${MAX_ITEMS} to-dos per session.`));
     }
 
     const added = lines.map<ChecklistItem>((line) => ({
@@ -114,15 +115,15 @@ export class ChecklistStore {
    * 정하면 다시 보내도 하나로 남는다.
    */
   addWithId(sessionId: string, id: string, text: string): { item: ChecklistItem; created: boolean } {
-    if (!CLIENT_ID.test(id)) throw new ChecklistError('잘못된 id입니다.');
+    if (!CLIENT_ID.test(id)) throw new ChecklistError(L('잘못된 id입니다.', 'Invalid id.'));
     const items = this.list(sessionId);
     const existing = items.find((i) => i.id === id);
     if (existing) return { item: existing, created: false };
 
     const line = text.replace(/\s*\n\s*/g, ' ').trim().slice(0, MAX_TEXT);
-    if (!line) throw new ChecklistError('추가할 내용이 없습니다.');
+    if (!line) throw new ChecklistError(L('추가할 내용이 없습니다.', 'Nothing to add.'));
     if (items.length + 1 > MAX_ITEMS) {
-      throw new ChecklistError(`할 일은 세션당 ${MAX_ITEMS}개까지입니다.`);
+      throw new ChecklistError(L(`할 일은 세션당 ${MAX_ITEMS}개까지입니다.`, `Up to ${MAX_ITEMS} to-dos per session.`));
     }
     const item: ChecklistItem = { id, text: line, done: false, createdAt: new Date().toISOString() };
     items.push(item);

@@ -1,4 +1,5 @@
 import type { NotificationKind } from './notifications.js';
+import { L } from './lang.js';
 
 /**
  * 외부 서비스가 보낸 몸통을 알림 한 건으로 옮긴다.
@@ -85,7 +86,7 @@ export function toNotification(raw: unknown, source?: string): HookInput | undef
     const lines = dump.split('\n').filter((l) => l.trim() && !/^[{}]$/.test(l.trim()));
     const first = (lines[0] ?? '').trim().replace(/[",]/g, '');
     return {
-      title: (first || '외부 알림').slice(0, MAX_TITLE),
+      title: (first || L('외부 알림', 'External notification')).slice(0, MAX_TITLE),
       body: dump.slice(0, MAX_BODY),
       kind: pickKind(obj),
       source,

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { config } from './config.js';
 import { CLIENT_ID } from './checklist.js';
+import { L } from './lang.js';
 
 /**
  * 미리 등록해 두는 명령.
@@ -87,15 +88,15 @@ export class SnippetStore {
     notifyOn?: Snippet['notifyOn'];
   }): Snippet {
     const command = input.command.trim().slice(0, MAX_COMMAND);
-    if (!command) throw new SnippetError('명령이 비었습니다.');
-    if (input.id !== undefined && !CLIENT_ID.test(input.id)) throw new SnippetError('잘못된 id입니다.');
+    if (!command) throw new SnippetError(L('명령이 비었습니다.', 'The command is empty.'));
+    if (input.id !== undefined && !CLIENT_ID.test(input.id)) throw new SnippetError(L('잘못된 id입니다.', 'Invalid id.'));
 
     // 이름을 안 주면 명령 앞부분을 쓴다. 목록에 빈 줄이 생기지 않게.
     const label = (input.label?.trim() || command).slice(0, MAX_LABEL);
 
     const items = this.list();
     if (items.length >= MAX_ITEMS) {
-      throw new SnippetError(`명령은 ${MAX_ITEMS}개까지입니다.`);
+      throw new SnippetError(L(`명령은 ${MAX_ITEMS}개까지입니다.`, `Up to ${MAX_ITEMS} commands.`));
     }
 
     const kind: SnippetKind = input.kind === 'cron' ? 'cron' : 'once';
@@ -126,7 +127,7 @@ export class SnippetStore {
     if (patch.label !== undefined) item.label = patch.label.trim().slice(0, MAX_LABEL);
     if (patch.command !== undefined) {
       const c = patch.command.trim().slice(0, MAX_COMMAND);
-      if (!c) throw new SnippetError('명령이 비었습니다.');
+      if (!c) throw new SnippetError(L('명령이 비었습니다.', 'The command is empty.'));
       item.command = c;
     }
     if (patch.dir !== undefined) item.dir = patch.dir.trim() || undefined;

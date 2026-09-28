@@ -450,6 +450,7 @@ agent는 받은 요청을 자기 HTTP API로 대신 호출해 결과를 돌려�
 | `RELAY_RATE_LIMIT` | `300` | 분당 요청 상한 |
 | `RELAY_LOGIN_LIMIT` | `10` | IP당 분당 로그인·초기 설정 시도 |
 | `RELAY_TRUST_PROXY` | (없음) | 리버스 프록시 뒤에 둘 때 `1`. 실제 IP를 `X-Forwarded-For`에서 읽는다. 프록시 없이 켜면 누구나 IP를 바꿔 시도 제한을 피한다 |
+| `RELAY_LANG` | `ko` | 서버가 만드는 글(할 일 알림·안경 첫 줄·오류)의 언어. `ko` 또는 `en`. 폰 언어와 같게 둔다 — 다르면 폰에서 한 일에 배너가 한 번 더 뜬다. 시작 로그는 늘 한국어 |
 
 `RELAY_WEB_ROOT`와 `RELAY_GLASSES_ROOT`는 **다른 경로다.** 헷갈리면
 `/web`에 엉뚱한 앱이 뜬다.

@@ -2,6 +2,7 @@ import { snippets, type Snippet } from './snippets.js';
 import { notifications } from './notifications.js';
 import { publish } from './events.js';
 import type { AgentRegistry } from './agents.js';
+import { L } from './lang.js';
 
 /**
  * 예약한 명령을 주기마다 돌린다.
@@ -73,8 +74,11 @@ export class Scheduler {
       // 같은 경고를 띄우면 알림이 쏟아진다.
       snippets.update(s.id, { kind: 'once' });
       this.notify(
-        `예약 취소: ${s.label}`,
-        '되돌릴 수 없는 명령이라 예약 실행에서 제외했습니다.\n웹에서 직접 실행하세요.',
+        L(`예약 취소: ${s.label}`, `Schedule canceled: ${s.label}`),
+        L(
+          '되돌릴 수 없는 명령이라 예약 실행에서 제외했습니다.\n웹에서 직접 실행하세요.',
+          'Removed from scheduled runs because it cannot be undone.\nRun it yourself from the web.',
+        ),
         'error',
       );
       return;
@@ -99,8 +103,8 @@ export class Scheduler {
     }
 
     this.notify(
-      `${s.label}${exitCode === 0 ? '' : ` (종료 ${exitCode})`}`,
-      output.trim().slice(0, MAX_BODY) || '(출력 없음)',
+      `${s.label}${exitCode === 0 ? '' : L(` (종료 ${exitCode})`, ` (exit ${exitCode})`)}`,
+      output.trim().slice(0, MAX_BODY) || L('(출력 없음)', '(no output)'),
       exitCode === 0 ? 'info' : 'error',
     );
   }

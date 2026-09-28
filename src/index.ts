@@ -26,6 +26,7 @@ import { snippets, SnippetError } from './core/snippets.js';
 import { Scheduler } from './core/scheduler.js';
 import { advertise, serviceName } from './core/bonjour.js';
 import { firstRunGuide } from './core/guide.js';
+import { L } from './core/lang.js';
 
 /** 같은 와이파이의 폰이 이 서버를 찾게 알린다. 멈출 때 부른다. */
 let stopAdvertising = (): void => undefined;
@@ -99,7 +100,7 @@ app.post(/^\/hooks\/notify(?:\/([\w.-]{1,40}))?$/, (req, res) => {
   // 키를 비워두면 훅을 닫는다. 설정을 안 했는데 열려 있으면 사고다.
   if (!config.hookKey) {
     res.status(503).json({
-      error: { code: 'hook_disabled', message: 'RELAY_HOOK_KEY가 없어 훅이 닫혀 있습니다.' },
+      error: { code: 'hook_disabled', message: L('RELAY_HOOK_KEY가 없어 훅이 닫혀 있습니다.', 'The hook is closed because RELAY_HOOK_KEY is not set.') },
     });
     return;
   }
@@ -107,7 +108,7 @@ app.post(/^\/hooks\/notify(?:\/([\w.-]{1,40}))?$/, (req, res) => {
   const ip = req.ip ?? 'unknown';
   if (!rateLimiter.allow(ip)) {
     res.status(429).json({
-      error: { code: 'rate_limited', message: '요청이 너무 잦습니다. 잠시 후 다시 시도하세요.' },
+      error: { code: 'rate_limited', message: L('요청이 너무 잦습니다. 잠시 후 다시 시도하세요.', 'Too many requests. Try again shortly.') },
     });
     return;
   }
@@ -125,7 +126,7 @@ app.post(/^\/hooks\/notify(?:\/([\w.-]{1,40}))?$/, (req, res) => {
 
   if (!safeEqual(provided, config.hookKey)) {
     logAuthFailure(ip, req.path);
-    res.status(401).json({ error: { code: 'unauthorized', message: '훅 키가 맞지 않습니다.' } });
+    res.status(401).json({ error: { code: 'unauthorized', message: L('훅 키가 맞지 않습니다.', 'Wrong hook key.') } });
     return;
   }
 
@@ -136,7 +137,7 @@ app.post(/^\/hooks\/notify(?:\/([\w.-]{1,40}))?$/, (req, res) => {
     res.status(400).json({
       error: {
         code: 'empty_payload',
-        message: '알림으로 만들 내용이 없습니다. title이나 text를 담아 보내세요.',
+        message: L('알림으로 만들 내용이 없습니다. title이나 text를 담아 보내세요.', 'Nothing to turn into a notification. Send a title or text.'),
       },
     });
     return;
@@ -154,7 +155,7 @@ app.post(/^\/hooks\/notify(?:\/([\w.-]{1,40}))?$/, (req, res) => {
     res.status(201).json({ id: item.id, unread: notifications.unreadCount() });
   } catch (err) {
     res.status(400).json({
-      error: { code: 'hook_failed', message: err instanceof Error ? err.message : '알림 추가 실패' },
+      error: { code: 'hook_failed', message: err instanceof Error ? err.message : L('알림 추가 실패', 'Failed to add the notification') },
     });
   }
 });
@@ -185,7 +186,7 @@ app.use((req, res, next) => {
   // 무차별 시도를 늦춘다.
   if (!rateLimiter.allow(ip)) {
     res.status(429).json({
-      error: { code: 'rate_limited', message: '요청이 너무 잦습니다. 잠시 후 다시 시도하세요.' },
+      error: { code: 'rate_limited', message: L('요청이 너무 잦습니다. 잠시 후 다시 시도하세요.', 'Too many requests. Try again shortly.') },
     });
     return;
   }
@@ -193,7 +194,7 @@ app.use((req, res, next) => {
   // 설정 전에는 잠가둔다. 키를 빠뜨린 채 인터넷에 열리는 사고를 막는다.
   if (!auth.isConfigured) {
     res.status(503).json({
-      error: { code: 'setup_required', message: '초기 설정이 필요합니다. /setup 에서 계정을 만드세요.' },
+      error: { code: 'setup_required', message: L('초기 설정이 필요합니다. /setup 에서 계정을 만드세요.', 'Setup required. Create an account at /setup.') },
     });
     return;
   }
@@ -209,7 +210,7 @@ app.use((req, res, next) => {
 
   if (!provided) {
     logAuthFailure(ip, req.path);
-    res.status(401).json({ error: { code: 'unauthorized', message: '로그인이 필요합니다.' } });
+    res.status(401).json({ error: { code: 'unauthorized', message: L('로그인이 필요합니다.', 'Sign-in required.') } });
     return;
   }
 
@@ -220,7 +221,7 @@ app.use((req, res, next) => {
 
   if (!ok) {
     logAuthFailure(ip, req.path);
-    res.status(401).json({ error: { code: 'unauthorized', message: '인증에 실패했습니다.' } });
+    res.status(401).json({ error: { code: 'unauthorized', message: L('인증에 실패했습니다.', 'Authentication failed.') } });
     return;
   }
   next();
@@ -242,7 +243,7 @@ app.get('/auth/status', (_req, res) => {
 app.post('/auth/setup', (req, res, next) => {
   const ip = req.ip ?? 'unknown';
   if (!loginLimiter.allow(ip)) {
-    res.status(429).json({ error: { code: 'rate_limited', message: '잠시 후 다시 시도하세요.' } });
+    res.status(429).json({ error: { code: 'rate_limited', message: L('잠시 후 다시 시도하세요.', 'Try again shortly.') } });
     return;
   }
   const { username, password, code } = (req.body ?? {}) as Record<string, string>;
@@ -259,12 +260,12 @@ app.post('/auth/login', (req, res, next) => {
   const ip = req.ip ?? 'unknown';
   // 로그인은 따로, 더 촘촘히 센다. 여러 IP로 나눠 시도하는 것은 전체 실패로 막는다.
   if (!loginLimiter.allow(ip) || globalLoginFailures.blocked('all')) {
-    res.status(429).json({ error: { code: 'rate_limited', message: '잠시 후 다시 시도하세요.' } });
+    res.status(429).json({ error: { code: 'rate_limited', message: L('잠시 후 다시 시도하세요.', 'Try again shortly.') } });
     return;
   }
   const { username, password, label } = (req.body ?? {}) as Record<string, string>;
   auth
-    .login(String(username ?? ''), String(password ?? ''), String(label ?? '기기').slice(0, 60))
+    .login(String(username ?? ''), String(password ?? ''), String(label ?? L('기기', 'Device')).slice(0, 60))
     .then((token) => res.json({ token, username }))
     .catch((err) => {
       logAuthFailure(ip, '/auth/login');
@@ -283,7 +284,7 @@ app.post('/auth/password', (req, res, next) => {
   const { current, next: nextPw } = (req.body ?? {}) as Record<string, string>;
   auth
     .changePassword(String(current ?? ''), String(nextPw ?? ''))
-    .then(() => res.json({ ok: true, message: '비밀번호를 바꿨습니다. 모든 기기가 로그아웃됩니다.' }))
+    .then(() => res.json({ ok: true, message: L('비밀번호를 바꿨습니다. 모든 기기가 로그아웃됩니다.', 'Password changed. All devices will be signed out.') }))
     .catch(next);
 });
 
@@ -324,18 +325,25 @@ app.get('/motd', (_req, res) => {
   const todos = checklists.list(GLOBAL_LIST);
   const up = Math.floor((Date.now() - startedAt) / 1000);
   const uptime =
-    up < 60 ? `${up}초` : up < 3600 ? `${Math.floor(up / 60)}분` : `${Math.floor(up / 3600)}시간`;
+    up < 60
+      ? L(`${up}초`, `${up}s`)
+      : up < 3600
+        ? L(`${Math.floor(up / 60)}분`, `${Math.floor(up / 60)}m`)
+        : L(`${Math.floor(up / 3600)}시간`, `${Math.floor(up / 3600)}h`);
 
   const unread = notifs.filter((n) => !n.readAt).length;
   const open = todos.filter((t) => !t.done).length;
 
   res.json({
     lines: [
-      `relay-service · 가동 ${uptime}`,
+      L(`relay-service · 가동 ${uptime}`, `relay-service · up ${uptime}`),
       list.length > 0
-        ? `agent ${list.length}대 연결됨 (${list.map((a) => a.name).join(', ')})`
-        : 'agent 미연결 — 맥에서 agent-cli를 실행하세요',
-      `알림 ${unread}건 · 할 일 ${open}건 남음`,
+        ? L(
+            `agent ${list.length}대 연결됨 (${list.map((a) => a.name).join(', ')})`,
+            `${list.length} agent${list.length === 1 ? '' : 's'} connected (${list.map((a) => a.name).join(', ')})`,
+          )
+        : L('agent 미연결 — 맥에서 agent-cli를 실행하세요', 'No agent connected — run agent-cli on the Mac'),
+      L(`알림 ${unread}건 · 할 일 ${open}건 남음`, `${unread} unread · ${open} to-do${open === 1 ? '' : 's'} left`),
     ],
 
     agents: list.length,
@@ -423,21 +431,23 @@ app.get('/checklist/sessions', (_req, res) => {
 app.post('/checklist', (req, res) => {
   const text = String((req.body as { text?: unknown })?.text ?? '');
   if (!text.trim()) {
-    res.status(400).json({ error: { code: 'empty_text', message: '추가할 내용이 없습니다.' } });
+    res.status(400).json({ error: { code: 'empty_text', message: L('추가할 내용이 없습니다.', 'Nothing to add.') } });
     return;
   }
   const id = (req.body as { id?: unknown })?.id;
   // 폰이 id를 정해 보내면 하나만 넣고, 같은 id를 다시 보내도 늘지 않는다.
   if (typeof id === 'string') {
     const { item, created } = checklists.addWithId(GLOBAL_LIST, id, text);
-    if (created) notifyTodo(`할 일 추가: ${item.text}`, '');
+    if (created) notifyTodo(L(`할 일 추가: ${item.text}`, `To-Do Added: ${item.text}`), '');
     res.status(created ? 201 : 200).json({ added: created ? [item] : [], items: checklists.list(GLOBAL_LIST) });
     return;
   }
   const added = checklists.addMany(GLOBAL_LIST, text);
   if (added.length > 0) {
     notifyTodo(
-      added.length === 1 ? `할 일 추가: ${added[0].text}` : `할 일 ${added.length}건 추가`,
+      added.length === 1
+      ? L(`할 일 추가: ${added[0].text}`, `To-Do Added: ${added[0].text}`)
+      : L(`할 일 ${added.length}건 추가`, `Added ${added.length} to-dos`),
       summarize(added),
     );
   }
@@ -446,7 +456,7 @@ app.post('/checklist', (req, res) => {
 
 app.post('/checklist/clear-done', (_req, res) => {
   const removed = checklists.clearDone(GLOBAL_LIST);
-  if (removed > 0) notifyTodo(`완료한 할 일 ${removed}건 정리`, '');
+  if (removed > 0) notifyTodo(L(`완료한 할 일 ${removed}건 정리`, `Cleared ${removed} completed to-do${removed === 1 ? '' : 's'}`), '');
   res.json({ removed, items: checklists.list(GLOBAL_LIST) });
 });
 
@@ -458,7 +468,7 @@ function reorderHandler(list: (req: Request) => string): express.RequestHandler 
   return (req, res) => {
     const ids = (req.body as { ids?: unknown })?.ids;
     if (!Array.isArray(ids) || ids.some((i) => typeof i !== 'string')) {
-      res.status(400).json({ error: { code: 'bad_ids', message: 'ids는 항목 id 배열이어야 합니다.' } });
+      res.status(400).json({ error: { code: 'bad_ids', message: L('ids는 항목 id 배열이어야 합니다.', 'ids must be an array of item ids.') } });
       return;
     }
     const items = checklists.reorder(list(req), ids as string[]);
@@ -474,27 +484,28 @@ app.post('/checklist/:itemId/toggle', (req, res) => {
   const done = (req.body as { done?: unknown })?.done;
   const item = checklists.toggle(GLOBAL_LIST, req.params.itemId, typeof done === 'boolean' ? done : undefined);
   if (!item) {
-    res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
+    res.status(404).json({ error: { code: 'item_not_found', message: L('없는 항목', 'No such item') } });
     return;
   }
-  notifyTodo(`${item.done ? '할 일 완료' : '할 일 되돌림'}: ${item.text}`, '');
+  notifyTodo(
+    item.done ? L(`할 일 완료: ${item.text}`, `To-Do Completed: ${item.text}`) : L(`할 일 되돌림: ${item.text}`, `To-Do Reopened: ${item.text}`), '');
   res.json({ item, items: checklists.list(GLOBAL_LIST) });
 });
 
 app.patch('/checklist/:itemId', (req, res) => {
   const text = String((req.body as { text?: unknown })?.text ?? '');
   if (!text.trim()) {
-    res.status(400).json({ error: { code: 'empty_text', message: '내용이 비었습니다.' } });
+    res.status(400).json({ error: { code: 'empty_text', message: L('내용이 비었습니다.', 'The text is empty.') } });
     return;
   }
   // 바꾸기 전 내용을 알림 본문에 남긴다. 바뀐 뒤에는 알 수 없다.
   const before = checklists.list(GLOBAL_LIST).find((i) => i.id === req.params.itemId);
   const item = checklists.update(GLOBAL_LIST, req.params.itemId, text);
   if (!item) {
-    res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
+    res.status(404).json({ error: { code: 'item_not_found', message: L('없는 항목', 'No such item') } });
     return;
   }
-  notifyTodo(`할 일 수정: ${item.text}`, before ? `이전: ${before.text}` : '');
+  notifyTodo(L(`할 일 수정: ${item.text}`, `To-Do Edited: ${item.text}`), before ? L(`이전: ${before.text}`, `Previous: ${before.text}`) : '');
   res.json({ item });
 });
 
@@ -502,7 +513,7 @@ app.delete('/checklist/:itemId', (req, res) => {
   // 지우기 전에 읽어둔다. 알림에 무엇을 지웠는지 남겨야 한다.
   const item = checklists.list(GLOBAL_LIST).find((i) => i.id === req.params.itemId);
   const removed = checklists.remove(GLOBAL_LIST, req.params.itemId);
-  if (removed && item) notifyTodo(`할 일 삭제: ${item.text}`, '');
+  if (removed && item) notifyTodo(L(`할 일 삭제: ${item.text}`, `To-Do Deleted: ${item.text}`), '');
   res.status(removed ? 204 : 404).end();
 });
 
@@ -551,7 +562,7 @@ app.post('/snippets', (req, res) => {
 app.patch('/snippets/:id', (req, res) => {
   const item = snippets.update(req.params.id, (req.body ?? {}) as never);
   if (!item) {
-    res.status(404).json({ error: { code: 'not_found', message: '없는 명령입니다.' } });
+    res.status(404).json({ error: { code: 'not_found', message: L('없는 명령입니다.', 'No such command.') } });
     return;
   }
   res.json({ item });
@@ -570,14 +581,14 @@ app.delete('/snippets/:id', (req, res) => {
 app.post('/snippets/:id/run', async (req, res) => {
   const item = snippets.get(req.params.id);
   if (!item) {
-    res.status(404).json({ error: { code: 'not_found', message: '없는 명령입니다.' } });
+    res.status(404).json({ error: { code: 'not_found', message: L('없는 명령입니다.', 'No such command.') } });
     return;
   }
 
   const agent = termAgents.default();
   if (!agent) {
     res.status(503).json({
-      error: { code: 'no_agent', message: '연결된 terminal-agent가 없습니다. 맥에서 실행하세요.' },
+      error: { code: 'no_agent', message: L('연결된 terminal-agent가 없습니다. 맥에서 실행하세요.', 'No terminal-agent connected. Run it on the Mac.') },
     });
     return;
   }
@@ -625,7 +636,7 @@ app.post('/notifications', (req, res) => {
   };
   const title = String(b.title ?? '');
   if (!title.trim()) {
-    res.status(400).json({ error: { code: 'empty_title', message: '알림 제목이 없습니다.' } });
+    res.status(400).json({ error: { code: 'empty_title', message: L('알림 제목이 없습니다.', 'The notification has no title.') } });
     return;
   }
   const kind = String(b.kind ?? 'info');
@@ -652,7 +663,7 @@ app.post('/notifications/clear-read', (_req, res) => {
 app.post('/notifications/:id/read', (req, res) => {
   const item = notifications.markRead(req.params.id);
   if (!item) {
-    res.status(404).json({ error: { code: 'not_found', message: '없는 알림' } });
+    res.status(404).json({ error: { code: 'not_found', message: L('없는 알림', 'No such notification') } });
     return;
   }
   res.json({ item, unread: notifications.unreadCount() });
@@ -675,23 +686,25 @@ app.get('/sessions/:id/checklist', (req, res) => {
 app.post('/sessions/:id/checklist', (req, res) => {
   const text = String((req.body as { text?: unknown })?.text ?? '');
   if (!text.trim()) {
-    res.status(400).json({ error: { code: 'empty_text', message: '추가할 내용이 없습니다.' } });
+    res.status(400).json({ error: { code: 'empty_text', message: L('추가할 내용이 없습니다.', 'Nothing to add.') } });
     return;
   }
   const clientId = (req.body as { id?: unknown })?.id;
   if (typeof clientId === 'string') {
     const { item, created } = checklists.addWithId(req.params.id, clientId, text);
-    if (created) notifyTodo(`할 일 추가: ${item.text}`, '', req.params.id);
+    if (created) notifyTodo(L(`할 일 추가: ${item.text}`, `To-Do Added: ${item.text}`), '', req.params.id);
     res.status(created ? 201 : 200).json({ added: created ? [item] : [], items: checklists.list(req.params.id) });
     return;
   }
   const added = checklists.addMany(req.params.id, text);
   if (added.length === 0) {
-    res.status(400).json({ error: { code: 'empty_text', message: '추가할 내용이 없습니다.' } });
+    res.status(400).json({ error: { code: 'empty_text', message: L('추가할 내용이 없습니다.', 'Nothing to add.') } });
     return;
   }
   notifyTodo(
-    added.length === 1 ? `할 일 추가: ${added[0].text}` : `할 일 ${added.length}건 추가`,
+    added.length === 1
+      ? L(`할 일 추가: ${added[0].text}`, `To-Do Added: ${added[0].text}`)
+      : L(`할 일 ${added.length}건 추가`, `Added ${added.length} to-dos`),
     summarize(added),
     req.params.id,
   );
@@ -700,7 +713,7 @@ app.post('/sessions/:id/checklist', (req, res) => {
 
 app.post('/sessions/:id/checklist/clear-done', (req, res) => {
   const removed = checklists.clearDone(req.params.id);
-  if (removed > 0) notifyTodo(`완료한 할 일 ${removed}건 정리`, '', req.params.id);
+  if (removed > 0) notifyTodo(L(`완료한 할 일 ${removed}건 정리`, `Cleared ${removed} completed to-do${removed === 1 ? '' : 's'}`), '', req.params.id);
   res.json({ removed, items: checklists.list(req.params.id) });
 });
 
@@ -713,33 +726,34 @@ app.post('/sessions/:id/checklist/:itemId/toggle', (req, res) => {
     typeof done === 'boolean' ? done : undefined,
   );
   if (!item) {
-    res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
+    res.status(404).json({ error: { code: 'item_not_found', message: L('없는 항목', 'No such item') } });
     return;
   }
-  notifyTodo(`${item.done ? '할 일 완료' : '할 일 되돌림'}: ${item.text}`, '', req.params.id);
+  notifyTodo(
+    item.done ? L(`할 일 완료: ${item.text}`, `To-Do Completed: ${item.text}`) : L(`할 일 되돌림: ${item.text}`, `To-Do Reopened: ${item.text}`), '', req.params.id);
   res.json({ item, items: checklists.list(req.params.id) });
 });
 
 app.patch('/sessions/:id/checklist/:itemId', (req, res) => {
   const text = String((req.body as { text?: unknown })?.text ?? '');
   if (!text.trim()) {
-    res.status(400).json({ error: { code: 'empty_text', message: '내용이 비었습니다.' } });
+    res.status(400).json({ error: { code: 'empty_text', message: L('내용이 비었습니다.', 'The text is empty.') } });
     return;
   }
   const before = checklists.list(req.params.id).find((i) => i.id === req.params.itemId);
   const item = checklists.update(req.params.id, req.params.itemId, text);
   if (!item) {
-    res.status(404).json({ error: { code: 'item_not_found', message: '없는 항목' } });
+    res.status(404).json({ error: { code: 'item_not_found', message: L('없는 항목', 'No such item') } });
     return;
   }
-  notifyTodo(`할 일 수정: ${item.text}`, before ? `이전: ${before.text}` : '', req.params.id);
+  notifyTodo(L(`할 일 수정: ${item.text}`, `To-Do Edited: ${item.text}`), before ? L(`이전: ${before.text}`, `Previous: ${before.text}`) : '', req.params.id);
   res.json({ item });
 });
 
 app.delete('/sessions/:id/checklist/:itemId', (req, res) => {
   const item = checklists.list(req.params.id).find((i) => i.id === req.params.itemId);
   const removed = checklists.remove(req.params.id, req.params.itemId);
-  if (removed && item) notifyTodo(`할 일 삭제: ${item.text}`, '', req.params.id);
+  if (removed && item) notifyTodo(L(`할 일 삭제: ${item.text}`, `To-Do Deleted: ${item.text}`), '', req.params.id);
   res.status(removed ? 204 : 404).end();
 });
 
@@ -760,7 +774,7 @@ async function forward(
   const agent = reg.default();
   if (!agent) {
     res.status(503).json({
-      error: { code: 'no_agent', message: `연결된 ${label}가 없습니다. 맥에서 실행하세요.` },
+      error: { code: 'no_agent', message: L(`연결된 ${label}가 없습니다. 맥에서 실행하세요.`, `No ${label} connected. Run it on the Mac.`) },
     });
     return;
   }
@@ -889,7 +903,7 @@ if (fs.existsSync(config.glassesRoot)) {
 }
 
 app.use((req, res) => {
-  res.status(404).json({ error: { code: 'not_found', message: `경로 없음: ${req.path}` } });
+  res.status(404).json({ error: { code: 'not_found', message: L(`경로 없음: ${req.path}`, `No such path: ${req.path}`) } });
 });
 
 app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
@@ -907,7 +921,7 @@ app.use((err: unknown, _req: Request, res: Response, _next: NextFunction) => {
   }
   // 내부 오류 문구에는 경로나 내부 사정이 섞인다. 밖에는 알리지 않고 로그로 남긴다.
   console.error('[relay] 처리 중 오류:', err);
-  res.status(500).json({ error: { code: 'internal_error', message: '서버 오류가 났습니다.' } });
+  res.status(500).json({ error: { code: 'internal_error', message: L('서버 오류가 났습니다.', 'Server error.') } });
 });
 
 // --- agent-cli 접속구 ---

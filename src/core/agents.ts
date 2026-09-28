@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
+import { L } from './lang.js';
 
 /**
  * 접속해 있는 agent-cli들.
@@ -53,7 +54,7 @@ class Agent {
     return new Promise<AgentReply>((resolve, reject) => {
       const timer = setTimeout(() => {
         this.pending.delete(id);
-        reject(new Error('agent-cli가 응답하지 않습니다.'));
+        reject(new Error(L('agent-cli가 응답하지 않습니다.', 'agent-cli is not responding.')));
       }, REQUEST_TIMEOUT_MS);
 
       this.pending.set(id, { resolve, reject, timer });
@@ -109,7 +110,7 @@ class Agent {
       if (!waiting) return;
       this.pending.delete(msg.id);
       clearTimeout(waiting.timer);
-      waiting.reject(new Error(msg.message ?? 'agent-cli 오류'));
+      waiting.reject(new Error(msg.message ?? L('agent-cli 오류', 'agent-cli error')));
       return;
     }
 
@@ -131,7 +132,7 @@ class Agent {
   dispose(): void {
     for (const { reject, timer } of this.pending.values()) {
       clearTimeout(timer);
-      reject(new Error('agent-cli 연결이 끊겼습니다.'));
+      reject(new Error(L('agent-cli 연결이 끊겼습니다.', 'agent-cli disconnected.')));
     }
     this.pending.clear();
     for (const onChunk of this.streams.values()) onChunk('', true);

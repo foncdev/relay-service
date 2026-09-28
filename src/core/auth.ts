@@ -3,6 +3,7 @@ import path from 'node:path';
 import { createHash, randomBytes, randomInt, randomUUID, scrypt, timingSafeEqual } from 'node:crypto';
 import { promisify } from 'node:util';
 import { config } from './config.js';
+import { L } from './lang.js';
 
 /**
  * 개인 인증.
@@ -159,54 +160,54 @@ export class AuthStore {
    */
   async setup(username: string, password: string, code: string): Promise<string> {
     if (this.isConfigured) {
-      throw new AuthError('이미 설정이 끝났습니다.', 409);
+      throw new AuthError(L('이미 설정이 끝났습니다.', 'Setup is already done.'), 409);
     }
     const expected = Buffer.from(normalizeCode(this.setupCodeValue ?? ''));
     const given = Buffer.from(normalizeCode(code));
     if (expected.length === 0 || given.length !== expected.length || !timingSafeEqual(given, expected)) {
-      throw new AuthError('설정 코드가 맞지 않습니다. 서버 시작 로그에서 확인하세요.', 403);
+      throw new AuthError(L('설정 코드가 맞지 않습니다. 서버 시작 로그에서 확인하세요.', 'Wrong setup code. Check the server start log.'), 403);
     }
     this.assertStrong(password);
     if (!/^[a-zA-Z0-9_-]{3,32}$/.test(username)) {
-      throw new AuthError('아이디는 영문/숫자/밑줄/하이픈 3~32자여야 합니다.');
+      throw new AuthError(L('아이디는 영문/숫자/밑줄/하이픈 3~32자여야 합니다.', 'Username must be 3–32 letters, digits, underscores or hyphens.'));
     }
 
     // 확인과 저장 사이에 해싱을 기다린다. 그 사이 두 번째 요청이 들어오면
     // 둘 다 통과해 나중 것이 계정을 덮어썼다(둘 다 관리자 토큰을 받았다).
     if (this.settingUp) {
-      throw new AuthError('설정이 진행 중입니다.', 409);
+      throw new AuthError(L('설정이 진행 중입니다.', 'Setup is in progress.'), 409);
     }
     this.settingUp = true;
     try {
       const hashed = await hashPassword(password);
-      if (this.isConfigured) throw new AuthError('이미 설정이 끝났습니다.', 409);
+      if (this.isConfigured) throw new AuthError(L('이미 설정이 끝났습니다.', 'Setup is already done.'), 409);
       this.data.account = { username, password: hashed, createdAt: new Date().toISOString() };
       this.setupCodeValue = undefined;
       this.save();
     } finally {
       this.settingUp = false;
     }
-    return this.issueToken('최초 설정');
+    return this.issueToken(L('최초 설정', 'Initial setup'));
   }
 
-  async login(username: string, password: string, label = '기기'): Promise<string> {
+  async login(username: string, password: string, label = L('기기', 'Device')): Promise<string> {
     const account = this.data.account;
-    if (!account) throw new AuthError('아직 설정되지 않았습니다.', 409);
+    if (!account) throw new AuthError(L('아직 설정되지 않았습니다.', 'Not set up yet.'), 409);
 
     // 아이디가 틀려도 같은 시간이 걸리도록 비밀번호 검증을 항상 수행한다.
     const okUser = account.username === username;
     const okPass = await verifyPassword(password, account.password);
     if (!okUser || !okPass) {
-      throw new AuthError('아이디 또는 비밀번호가 올바르지 않습니다.', 401);
+      throw new AuthError(L('아이디 또는 비밀번호가 올바르지 않습니다.', 'Wrong username or password.'), 401);
     }
     return this.issueToken(label);
   }
 
   async changePassword(current: string, next: string): Promise<void> {
     const account = this.data.account;
-    if (!account) throw new AuthError('아직 설정되지 않았습니다.', 409);
+    if (!account) throw new AuthError(L('아직 설정되지 않았습니다.', 'Not set up yet.'), 409);
     if (!(await verifyPassword(current, account.password))) {
-      throw new AuthError('현재 비밀번호가 올바르지 않습니다.', 401);
+      throw new AuthError(L('현재 비밀번호가 올바르지 않습니다.', 'The current password is wrong.'), 401);
     }
     this.assertStrong(next);
 
@@ -283,14 +284,14 @@ export class AuthStore {
    */
   private assertStrong(password: string): void {
     if (password.length < 10) {
-      throw new AuthError('비밀번호는 10자 이상이어야 합니다.');
+      throw new AuthError(L('비밀번호는 10자 이상이어야 합니다.', 'Password must be at least 10 characters.'));
     }
     if (password.length > 200) {
-      throw new AuthError('비밀번호가 너무 깁니다.');
+      throw new AuthError(L('비밀번호가 너무 깁니다.', 'Password is too long.'));
     }
     const common = ['password', '12345678', 'qwerty', 'admin123', 'letmein'];
     if (common.some((c) => password.toLowerCase().includes(c))) {
-      throw new AuthError('너무 흔한 비밀번호입니다.');
+      throw new AuthError(L('너무 흔한 비밀번호입니다.', 'That password is too common.'));
     }
   }
 }
