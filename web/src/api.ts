@@ -1,5 +1,7 @@
 /** 매니저 REST API 클라이언트. */
 
+import { msg } from './i18n.js';
+
 export interface Workspace {
   id: string;
   path: string;
@@ -217,7 +219,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   if (!res.ok) {
     const err = (body as { error?: { message?: string; code?: string } }).error;
-    throw new ApiError(err?.message ?? `요청 실패 (${res.status})`, err?.code ?? 'unknown', res.status);
+    throw new ApiError(err?.message ?? msg().requestFailed(res.status), err?.code ?? 'unknown', res.status);
   }
   return body as T;
 }
@@ -241,7 +243,7 @@ export const api = {
   login: (username: string, password: string) =>
     request<{ token: string; username: string }>('/auth/login', {
       method: 'POST',
-      ...json({ username, password, label: '웹' }),
+      ...json({ username, password, label: msg().deviceLabel }),
     }),
   logout: () => request<void>('/auth/logout', { method: 'POST' }),
   changePassword: (current: string, next: string) =>

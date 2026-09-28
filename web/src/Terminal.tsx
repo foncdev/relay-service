@@ -3,6 +3,7 @@ import { Terminal as Xterm } from '@xterm/xterm';
 import { FitAddon } from '@xterm/addon-fit';
 import '@xterm/xterm/css/xterm.css';
 import { api, streamTerminal, type TerminalInfo } from './api.js';
+import { msg } from './i18n.js';
 
 /**
  * 터미널 화면.
@@ -26,6 +27,7 @@ function TerminalViewInner({
   terminal: TerminalInfo;
   onExit?: () => void;
 }) {
+  const t = msg();
   const boxRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<Xterm | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
@@ -102,7 +104,7 @@ function TerminalViewInner({
     if (!data) return;
 
     api.sendTerminalInput(terminal.id, data).catch(() => {
-      setError('입력을 보내지 못했습니다.');
+      setError(msg().inputFailed);
     });
   }, [terminal.id]);
 
@@ -156,10 +158,10 @@ function TerminalViewInner({
       {
         onExit: (code) => {
           setExited(true);
-          term.write(`\r\n\x1b[90m[셸이 종료되었습니다 · 코드 ${code}]\x1b[0m\r\n`);
+          term.write(`\r\n\x1b[90m${msg().shellExitedCode(code)}\x1b[0m\r\n`);
           onExitRef.current?.();
         },
-        onError: () => setError('연결이 끊겼습니다.'),
+        onError: () => setError(msg().connectionLost),
       },
     );
 
@@ -198,11 +200,10 @@ function TerminalViewInner({
   return (
     <div className="term-wrap">
       {error && <div className="term-error">{error}</div>}
-      {exited && !error && <div className="term-exited">셸이 종료되었습니다.</div>}
+      {exited && !error && <div className="term-exited">{t.shellExited}</div>}
       {clipped && !error && (
         <div className="term-clipped">
-          다른 화면이 더 작아 {shellSize.cols}×{shellSize.rows}로 맞췄습니다. 아래 여백은 셸이 쓰지
-          않는 영역입니다.
+          {t.clipped(shellSize.cols, shellSize.rows)}
         </div>
       )}
       {/* 셸이 쓰는 영역만 테두리로 감싼다. 밖은 여백임을 눈으로 알 수 있게.

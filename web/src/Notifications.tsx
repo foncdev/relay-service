@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type Notification } from './api.js';
+import { formatDateTime, msg } from './i18n.js';
 
 /** 알림 종류별 표시. 안경과 같은 기호를 쓴다. */
 const MARK: Record<Notification['kind'], string> = {
@@ -15,6 +16,7 @@ const MARK: Record<Notification['kind'], string> = {
  * 서버에 쌓이므로 안경에서 놓친 완료 알림도 여기서 다시 볼 수 있다.
  */
 export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) => void }) {
+  const t = msg();
   const [items, setItems] = useState<Notification[]>([]);
   const [unread, setUnread] = useState(0);
   const [open, setOpen] = useState<string | null>(null);
@@ -79,7 +81,7 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
       // 서버가 id와 시각을 정한다. 직접 끼워 넣지 않고 다시 읽는다.
       await load();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '알림 추가 실패', true);
+      onToast(err instanceof Error ? err.message : t.addNotificationFailed, true);
     } finally {
       setBusy(false);
     }
@@ -92,7 +94,7 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
       setItems((prev) => prev.map((x) => ({ ...x, readAt: x.readAt ?? now })));
       setUnread(0);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '처리 실패', true);
+      onToast(err instanceof Error ? err.message : t.actionFailed, true);
     }
   }
 
@@ -101,9 +103,9 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
       const { removed, items: next, unread: left } = await api.clearReadNotifications();
       setItems(next);
       setUnread(left);
-      if (removed > 0) onToast(`${removed}개 정리했습니다.`);
+      if (removed > 0) onToast(t.cleared(removed));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '정리 실패', true);
+      onToast(err instanceof Error ? err.message : t.clearFailed, true);
     }
   }
 
@@ -113,19 +115,16 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
       setItems((prev) => prev.filter((x) => x.id !== n.id));
       if (!n.readAt) setUnread((u) => Math.max(u - 1, 0));
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '삭제 실패', true);
+      onToast(err instanceof Error ? err.message : t.deleteFailed, true);
     }
   }
 
-  const time = (iso: string): string => {
-    const d = new Date(iso);
-    return Number.isNaN(d.getTime()) ? '' : d.toLocaleString('ko-KR', { hour12: false });
-  };
+  const time = formatDateTime;
 
   return (
     <div className="checklist">
       <div className="checklist-head">
-        <span>알림</span>
+        <span>{t.notifications}</span>
         {items.length > 0 && (
           <span className="badge">
             {unread}/{items.length}
@@ -134,18 +133,18 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
         <span className="spacer" />
         {unread > 0 && (
           <button className="ghost" onClick={() => void readAll()}>
-            모두 읽음
+            {t.markAllRead}
           </button>
         )}
         {items.some((n) => n.readAt) && (
-          <button className="ghost" onClick={() => void clearRead()} title="읽은 알림 정리">
-            읽음 정리
+          <button className="ghost" onClick={() => void clearRead()} title={t.clearReadTitle}>
+            {t.clearRead}
           </button>
         )}
       </div>
 
       <div className="checklist-items">
-        {items.length === 0 && <div className="checklist-empty">알림이 없습니다.</div>}
+        {items.length === 0 && <div className="checklist-empty">{t.noNotifications}</div>}
 
         {items.map((n) => (
           <div key={n.id} className={`notif${n.readAt ? ' read' : ''}`}>
@@ -155,7 +154,7 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
               <span className="notif-time">{time(n.createdAt)}</span>
             </button>
             {open === n.id && n.body && <pre className="notif-body">{n.body}</pre>}
-            <button className="ghost danger notif-del" title="삭제" onClick={() => void remove(n)}>
+            <button className="ghost danger notif-del" title={t.delete} onClick={() => void remove(n)}>
               ✕
             </button>
           </div>
@@ -166,7 +165,7 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
         <textarea
           rows={2}
           value={input}
-          placeholder="알림 내용 (첫 줄이 제목, Enter 추가, Shift+Enter 줄바꿈)"
+          placeholder={t.notificationPlaceholder}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
@@ -176,7 +175,7 @@ export function Notifications({ onToast }: { onToast: (m: string, e?: boolean) =
           }}
         />
         <button className="primary" disabled={!input.trim() || busy} onClick={() => void add()}>
-          추가
+          {t.add}
         </button>
       </div>
     </div>

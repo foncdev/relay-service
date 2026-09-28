@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
+import { formatRelative, msg } from './i18n.js';
 
 export function Modal({
   title,
@@ -62,7 +63,7 @@ export function PromptModal({
   label,
   initial = '',
   placeholder,
-  confirmLabel = '확인',
+  confirmLabel = msg().ok,
   onSubmit,
   onClose,
 }: {
@@ -92,7 +93,7 @@ export function PromptModal({
         />
       </div>
       <div className="modal-actions">
-        <button onClick={onClose}>취소</button>
+        <button onClick={onClose}>{msg().cancel}</button>
         <button className="primary" disabled={!ready} onClick={() => onSubmit(value.trim())}>
           {confirmLabel}
         </button>
@@ -105,7 +106,7 @@ export function PromptModal({
 export function ConfirmModal({
   title,
   message,
-  confirmLabel = '확인',
+  confirmLabel = msg().ok,
   danger = false,
   onConfirm,
   onClose,
@@ -121,7 +122,7 @@ export function ConfirmModal({
     <Modal title={title} onClose={onClose}>
       <div style={{ color: 'var(--text-dim)', whiteSpace: 'pre-wrap' }}>{message}</div>
       <div className="modal-actions">
-        <button onClick={onClose}>취소</button>
+        <button onClick={onClose}>{msg().cancel}</button>
         <button className={danger ? 'danger' : 'primary'} onClick={onConfirm}>
           {confirmLabel}
         </button>
@@ -136,12 +137,7 @@ export function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
+/** 목록 옆에 붙는 경과 시간. 브라우저 언어에 맞춰 Intl로 찍는다. */
 export function formatTime(iso: string): string {
-  const d = new Date(iso);
-  const now = Date.now();
-  const diff = now - d.getTime();
-  if (diff < 60_000) return '방금';
-  if (diff < 3600_000) return `${Math.floor(diff / 60_000)}분 전`;
-  if (diff < 86400_000) return `${Math.floor(diff / 3600_000)}시간 전`;
-  return d.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' });
+  return formatRelative(iso);
 }

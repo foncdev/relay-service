@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { api, type FileEntry } from './api.js';
 import { ConfirmModal, Modal, PromptModal, formatSize } from './ui.js';
+import { msg } from './i18n.js';
 
 /** 경로를 조각으로 나눈다. 빈 문자열은 루트. */
 function crumbsOf(dir: string): Array<{ name: string; path: string }> {
@@ -20,6 +21,7 @@ export function Files({
   workspaceId: string;
   onToast: (message: string, isError?: boolean) => void;
 }) {
+  const t = msg();
   const [dir, setDir] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
   const [hidden, setHidden] = useState(false);
@@ -41,7 +43,7 @@ export function Files({
       const { entries: list } = await api.listFiles(workspaceId, dir, hidden);
       setEntries(list);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '목록 조회 실패', true);
+      onToast(err instanceof Error ? err.message : msg().listFailed, true);
       setEntries([]);
     } finally {
       setLoading(false);
@@ -69,7 +71,7 @@ export function Files({
       setContent(file.content);
       setOriginal(file.content);
     } catch (err) {
-      const message = err instanceof Error ? err.message : '파일 열기 실패';
+      const message = err instanceof Error ? err.message : t.openFileFailed;
       // 바이너리/대용량은 다운로드로 안내한다.
       onToast(message, true);
     }
@@ -81,10 +83,10 @@ export function Files({
     try {
       await api.writeFile(workspaceId, openPath, content);
       setOriginal(content);
-      onToast('저장했습니다.');
+      onToast(t.saved);
       void refresh();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '저장 실패', true);
+      onToast(err instanceof Error ? err.message : t.saveFailed, true);
     } finally {
       setSaving(false);
     }
@@ -94,10 +96,10 @@ export function Files({
     try {
       await api.deleteFile(workspaceId, entry.path, entry.type === 'dir');
       if (openPath === entry.path) setOpenPath(null);
-      onToast('삭제했습니다.');
+      onToast(t.deleted);
       void refresh();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '삭제 실패', true);
+      onToast(err instanceof Error ? err.message : t.deleteFailed, true);
     }
   }
 
@@ -108,7 +110,7 @@ export function Files({
       if (openPath === entry.path) setOpenPath(null);
       void refresh();
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '이름 변경 실패', true);
+      onToast(err instanceof Error ? err.message : t.renameFailed, true);
     }
   }
 
@@ -118,22 +120,22 @@ export function Files({
     <div className="files">
       <div className="file-tree">
         <div className="bar" style={{ borderBottom: 'none', paddingLeft: 4 }}>
-          <button className="ghost" onClick={() => setNewFile('')} title="새 파일">
-            ＋파일
+          <button className="ghost" onClick={() => setNewFile('')} title={t.newFile}>
+            {t.newFileButton}
           </button>
-          <button className="ghost" onClick={() => setNewDir('')} title="새 폴더">
-            ＋폴더
+          <button className="ghost" onClick={() => setNewDir('')} title={t.newFolder}>
+            {t.newFolderButton}
           </button>
           <span className="spacer" />
           <button
             className="ghost"
             onClick={() => setHidden((v) => !v)}
-            title="숨김 파일 표시"
+            title={t.showHidden}
             style={{ color: hidden ? 'var(--accent)' : undefined }}
           >
-            숨김
+            {t.hidden}
           </button>
-          <button className="ghost" onClick={() => void refresh()} title="새로고침">
+          <button className="ghost" onClick={() => void refresh()} title={t.refresh}>
             ↻
           </button>
         </div>
@@ -161,7 +163,7 @@ export function Files({
         )}
 
         {loading && entries.length === 0 && (
-          <div style={{ padding: 12, color: 'var(--text-faint)', fontSize: 12 }}>불러오는 중…</div>
+          <div style={{ padding: 12, color: 'var(--text-faint)', fontSize: 12 }}>{t.loading}</div>
         )}
 
         {entries.map((entry) => (
@@ -175,7 +177,7 @@ export function Files({
             {entry.type === 'file' && <span className="file-size">{formatSize(entry.size)}</span>}
             <button
               className="ghost"
-              title="이름 변경"
+              title={t.rename}
               onClick={(e) => {
                 e.stopPropagation();
                 setRenaming(entry);
@@ -185,7 +187,7 @@ export function Files({
             </button>
             <button
               className="ghost danger"
-              title="삭제"
+              title={t.delete}
               onClick={(e) => {
                 e.stopPropagation();
                 setDeleting(entry);
@@ -197,7 +199,7 @@ export function Files({
         ))}
 
         {!loading && entries.length === 0 && (
-          <div style={{ padding: 12, color: 'var(--text-faint)', fontSize: 12 }}>비어 있습니다.</div>
+          <div style={{ padding: 12, color: 'var(--text-faint)', fontSize: 12 }}>{t.empty}</div>
         )}
       </div>
 
@@ -206,20 +208,20 @@ export function Files({
           <>
             <div className="bar">
               <span className="mono">{openPath}</span>
-              {dirty && <span className="badge" style={{ color: 'var(--warn)' }}>수정됨</span>}
+              {dirty && <span className="badge" style={{ color: 'var(--warn)' }}>{t.modified}</span>}
               <span className="spacer" />
               <a
                 href={api.downloadUrl(workspaceId, openPath)}
                 download
                 style={{ color: 'var(--text-dim)', fontSize: 12, textDecoration: 'none' }}
               >
-                다운로드
+                {t.download}
               </a>
               <button onClick={() => setContent(original)} disabled={!dirty}>
-                되돌리기
+                {t.revert}
               </button>
               <button className="primary" onClick={() => void save()} disabled={!dirty || saving}>
-                저장
+                {t.save}
               </button>
             </div>
             <textarea
@@ -236,24 +238,24 @@ export function Files({
             />
           </>
         ) : (
-          <div className="empty">왼쪽에서 파일을 선택하세요.</div>
+          <div className="empty">{t.pickFile}</div>
         )}
       </div>
 
       {newFile !== null && (
-        <Modal title="새 파일" onClose={() => setNewFile(null)}>
+        <Modal title={t.newFile} onClose={() => setNewFile(null)}>
           <div className="field">
-            <label>파일 이름</label>
+            <label>{t.fileName}</label>
             <input
               autoFocus
               value={newFile}
               onChange={(e) => setNewFile(e.target.value)}
               placeholder="notes.md"
             />
-            <span className="hint">현재 경로: /{dir}</span>
+            <span className="hint">{t.currentPath(dir)}</span>
           </div>
           <div className="modal-actions">
-            <button onClick={() => setNewFile(null)}>취소</button>
+            <button onClick={() => setNewFile(null)}>{t.cancel}</button>
             <button
               className="primary"
               disabled={!newFile.trim()}
@@ -267,11 +269,11 @@ export function Files({
                   setOriginal('');
                   void refresh();
                 } catch (err) {
-                  onToast(err instanceof Error ? err.message : '생성 실패', true);
+                  onToast(err instanceof Error ? err.message : t.createFailed, true);
                 }
               }}
             >
-              만들기
+              {t.create}
             </button>
           </div>
         </Modal>
@@ -279,10 +281,10 @@ export function Files({
 
       {renaming && (
         <PromptModal
-          title="이름 변경"
-          label="새 이름"
+          title={t.rename}
+          label={t.newName}
           initial={renaming.name}
-          confirmLabel="변경"
+          confirmLabel={t.renameAction}
           onClose={() => setRenaming(null)}
           onSubmit={(next) => {
             void rename(renaming, next);
@@ -293,11 +295,9 @@ export function Files({
 
       {deleting && (
         <ConfirmModal
-          title="삭제"
-          message={`${deleting.type === 'dir' ? '디렉토리' : '파일'} "${deleting.name}"을(를) 삭제할까요?${
-            deleting.type === 'dir' ? '\n안에 든 내용도 함께 삭제됩니다.' : ''
-          }\n되돌릴 수 없습니다.`}
-          confirmLabel="삭제"
+          title={t.delete}
+          message={t.deleteEntryQ(deleting.type === 'dir', deleting.name)}
+          confirmLabel={t.delete}
           danger
           onClose={() => setDeleting(null)}
           onConfirm={() => {
@@ -308,19 +308,19 @@ export function Files({
       )}
 
       {newDir !== null && (
-        <Modal title="새 폴더" onClose={() => setNewDir(null)}>
+        <Modal title={t.newFolder} onClose={() => setNewDir(null)}>
           <div className="field">
-            <label>폴더 이름</label>
+            <label>{t.folderName}</label>
             <input
               autoFocus
               value={newDir}
               onChange={(e) => setNewDir(e.target.value)}
               placeholder="src"
             />
-            <span className="hint">현재 경로: /{dir}</span>
+            <span className="hint">{t.currentPath(dir)}</span>
           </div>
           <div className="modal-actions">
-            <button onClick={() => setNewDir(null)}>취소</button>
+            <button onClick={() => setNewDir(null)}>{t.cancel}</button>
             <button
               className="primary"
               disabled={!newDir.trim()}
@@ -330,11 +330,11 @@ export function Files({
                   setNewDir(null);
                   void refresh();
                 } catch (err) {
-                  onToast(err instanceof Error ? err.message : '생성 실패', true);
+                  onToast(err instanceof Error ? err.message : t.createFailed, true);
                 }
               }}
             >
-              만들기
+              {t.create}
             </button>
           </div>
         </Modal>

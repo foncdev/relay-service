@@ -14,7 +14,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 
-const PORT = 4189;
+const PORT = 4191;
 const BASE = `http://127.0.0.1:${PORT}`;
 
 let proc: ChildProcess;

@@ -3,6 +3,7 @@ import { BANNER } from './banner.js';
 import { Login } from './Login.js';
 import {
   api,
+  ApiError,
   getToken,
   setToken,
   SIGNED_OUT_EVENT,
@@ -21,6 +22,7 @@ import { Checklist } from './Checklist.js';
 import { Terminals } from './Terminals.js';
 import { Files } from './Files.js';
 import { ConfirmModal, Modal, PromptModal, formatTime, useToast } from './ui.js';
+import { msg } from './i18n.js';
 
 /**
  * 세션 목록이 실질적으로 같은지 본다.
@@ -51,6 +53,7 @@ function sameSessions(a: SessionInfo[], b: SessionInfo[]): boolean {
 type Tab = 'sessions' | 'files' | 'term' | 'todo' | 'notif';
 
 export function App() {
+  const t = msg();
   const [toastNode, toast] = useToast();
   /** 로그인 여부. 토큰이 있으면 이미 로그인한 상태로 본다. */
   const [signedIn, setSignedIn] = useState(Boolean(getToken()));
@@ -98,9 +101,11 @@ export function App() {
       setWorkspaces(list);
       setWorkspaceId((cur) => (cur && list.some((w) => w.id === cur) ? cur : (list[0]?.id ?? '')));
     } catch (err) {
-      const message = err instanceof Error ? err.message : '워크스페이스 조회 실패';
+      const message = err instanceof Error ? err.message : msg().loadWorkspacesFailed;
       // agent-cli가 아직 안 붙었을 뿐이면 오류로 보이지 않게 한다.
       // 체크리스트 등 서버 자체 기능은 그대로 쓸 수 있다.
+      // 서버 메시지는 RELAY_LANG에 따라 바뀌므로 코드로 가린다.
+      if (err instanceof ApiError && (err.code === 'no_agent' || err.code === 'agent_error')) return;
       if (message.includes('agent-cli')) return;
       if (message.includes('x-api-key')) setShowSettings(true);
       toast(message, true);
@@ -149,7 +154,7 @@ export function App() {
       await api.closeSession(id);
       void loadSessions();
     } catch (err) {
-      toast(err instanceof Error ? err.message : '종료 실패', true);
+      toast(err instanceof Error ? err.message : msg().closeFailed, true);
     }
   }
 
@@ -159,7 +164,7 @@ export function App() {
       if (activeId === id) setActiveId('');
       void loadSessions();
     } catch (err) {
-      toast(err instanceof Error ? err.message : '삭제 실패', true);
+      toast(err instanceof Error ? err.message : msg().deleteFailed, true);
     }
   }
 
@@ -169,9 +174,9 @@ export function App() {
       const { session, deletedOriginal } = await api.resumeSession(id, deleteOnResume);
       await loadSessions();
       setActiveId(session.id);
-      toast(deletedOriginal ? '대화를 이어갑니다. 원본 기록은 삭제했습니다.' : '대화를 이어갑니다.');
+      toast(deletedOriginal ? msg().resumedDeleted : msg().resumed);
     } catch (err) {
-      toast(err instanceof Error ? err.message : '이어가기 실패', true);
+      toast(err instanceof Error ? err.message : msg().resumeFailed, true);
     }
   }
 
@@ -180,7 +185,7 @@ export function App() {
       await api.renameSession(id, title);
       void loadSessions();
     } catch (err) {
-      toast(err instanceof Error ? err.message : '이름 변경 실패', true);
+      toast(err instanceof Error ? err.message : msg().renameFailed, true);
     }
   }
 
@@ -225,28 +230,28 @@ export function App() {
               {l}
             </div>
           ))}
-          <button className="ghost motd-close" onClick={() => setMotd([])} title="닫기">
+          <button className="ghost motd-close" onClick={() => setMotd([])} title={t.close}>
             ✕
           </button>
         </div>
       )}
       <div className="topbar">
-        <h1>Claude Code 매니저</h1>
+        <h1>{t.appTitle}</h1>
         <div className="tabs">
           <button className={tab === 'sessions' ? 'active' : ''} onClick={() => setTab('sessions')}>
-            세션
+            {t.tabSessions}
           </button>
           <button className={tab === 'files' ? 'active' : ''} onClick={() => setTab('files')}>
-            파일
+            {t.tabFiles}
           </button>
           <button className={tab === 'term' ? 'active' : ''} onClick={() => setTab('term')}>
-            터미널
+            {t.tabTerminal}
           </button>
           <button className={tab === 'todo' ? 'active' : ''} onClick={() => setTab('todo')}>
-            할 일
+            {t.tabTodos}
           </button>
           <button className={tab === 'notif' ? 'active' : ''} onClick={() => setTab('notif')}>
-            알림
+            {t.tabNotifications}
           </button>
         </div>
         <span className="spacer" />
@@ -254,24 +259,24 @@ export function App() {
           value={workspaceId}
           onChange={(e) => setWorkspaceId(e.target.value)}
           style={{ width: 'auto', maxWidth: 240 }}
-          title="워크스페이스"
+          title={t.workspace}
         >
-          {workspaces.length === 0 && <option value="">워크스페이스 없음</option>}
+          {workspaces.length === 0 && <option value="">{t.noWorkspaces}</option>}
           {workspaces.map((w) => (
             <option key={w.id} value={w.id}>
               {w.id}
             </option>
           ))}
         </select>
-        <button onClick={() => setShowNewWorkspace(true)} title="워크스페이스 추가">
+        <button onClick={() => setShowNewWorkspace(true)} title={t.addWorkspace}>
           ＋
         </button>
-        <button className="ghost" onClick={() => setShowSettings(true)} title="설정">
+        <button className="ghost" onClick={() => setShowSettings(true)} title={t.settings}>
           ⚙
         </button>
         <button
           className="ghost"
-          title={username ? `${username} — 로그아웃` : '로그아웃'}
+          title={username ? t.signOutAs(username) : t.signOut}
           onClick={() => {
             // 서버에서도 토큰을 버린다. 실패해도 로컬은 지운다.
             void api.logout().catch(() => undefined);
@@ -279,7 +284,7 @@ export function App() {
             setSignedIn(false);
           }}
         >
-          로그아웃
+          {t.signOut}
         </button>
       </div>
 
@@ -288,16 +293,16 @@ export function App() {
           <>
             <div className="sidebar">
               <div className="sidebar-head">
-                <span>세션</span>
+                <span>{t.sessions}</span>
                 <span className="spacer" />
-                <button className="ghost" onClick={() => setShowNewSession(true)} title="새 세션">
+                <button className="ghost" onClick={() => setShowNewSession(true)} title={t.newSession}>
                   ＋
                 </button>
               </div>
               <div className="sidebar-list">
                 {sessions.length === 0 && (
                   <div style={{ padding: 12, color: 'var(--text-faint)', fontSize: 12 }}>
-                    세션이 없습니다.
+                    {t.noSessions}
                   </div>
                 )}
                 {sessions.map((s) => (
@@ -309,11 +314,11 @@ export function App() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <span className={`dot ${s.status}`} />
                       <span className="session-title">
-                        {s.title || '새 대화'}
+                        {s.title || t.newChat}
                       </span>
                       <button
                         className="ghost"
-                        title="이름 변경"
+                        title={t.rename}
                         onClick={(e) => {
                           e.stopPropagation();
                           setRenaming(s);
@@ -324,7 +329,7 @@ export function App() {
                       {s.live ? (
                         <button
                           className="ghost"
-                          title="세션 종료"
+                          title={t.closeSession}
                           onClick={(e) => {
                             e.stopPropagation();
                             setConfirming({ session: s, kind: 'close' });
@@ -336,7 +341,7 @@ export function App() {
                         <>
                           <button
                             className="ghost"
-                            title="대화 이어가기"
+                            title={t.resumeChat}
                             onClick={(e) => {
                               e.stopPropagation();
                               void resumeSession(s.id);
@@ -346,7 +351,7 @@ export function App() {
                           </button>
                           <button
                             className="ghost danger"
-                            title="기록 삭제"
+                            title={t.deleteHistory}
                             onClick={(e) => {
                               e.stopPropagation();
                               setConfirming({ session: s, kind: 'delete' });
@@ -377,18 +382,16 @@ export function App() {
                     void loadSessions();
                     setActiveId(id);
                     toast(
-                      deletedOriginal
-                        ? '대화를 이어갑니다. 원본 기록은 삭제했습니다.'
-                        : '대화를 이어갑니다.',
+                      deletedOriginal ? t.resumedDeleted : t.resumed,
                     );
                   }}
                   onToast={toast}
                 />
               ) : (
                 <div className="empty">
-                  <div>세션을 선택하거나 새로 만드세요.</div>
+                  <div>{t.pickOrCreateSession}</div>
                   <button className="primary" onClick={() => setShowNewSession(true)}>
-                    새 세션
+                    {t.newSession}
                   </button>
                 </div>
               )}
@@ -417,7 +420,7 @@ export function App() {
           (workspaceId ? (
             <Files workspaceId={workspaceId} onToast={toast} />
           ) : (
-            <div className="empty">먼저 워크스페이스를 추가하세요.</div>
+            <div className="empty">{t.addWorkspaceFirst}</div>
           ))}
       </div>
 
@@ -454,11 +457,11 @@ export function App() {
 
       {renaming && (
         <PromptModal
-          title="세션 이름 변경"
-          label="이름"
+          title={t.renameSession}
+          label={t.name}
           initial={renaming.title ?? ''}
-          placeholder="세션 이름"
-          confirmLabel="변경"
+          placeholder={t.sessionName}
+          confirmLabel={t.renameAction}
           onClose={() => setRenaming(null)}
           onSubmit={(title) => {
             void renameSession(renaming.id, title);
@@ -469,13 +472,13 @@ export function App() {
 
       {confirming && (
         <ConfirmModal
-          title={confirming.kind === 'close' ? '세션 종료' : '기록 삭제'}
+          title={confirming.kind === 'close' ? t.closeSession : t.deleteHistory}
           message={
             confirming.kind === 'close'
-              ? `"${confirming.session.title || '새 대화'}" 세션을 종료할까요?\n대화 기록은 남습니다.`
-              : `"${confirming.session.title || '새 대화'}" 의 대화 기록을 완전히 삭제할까요?\n되돌릴 수 없습니다.`
+              ? t.closeSessionQ(confirming.session.title || t.newChat)
+              : t.deleteHistoryQ(confirming.session.title || t.newChat)
           }
-          confirmLabel={confirming.kind === 'close' ? '종료' : '삭제'}
+          confirmLabel={confirming.kind === 'close' ? t.closeAction : t.delete}
           danger={confirming.kind === 'delete'}
           onClose={() => setConfirming(null)}
           onConfirm={() => {
@@ -518,6 +521,7 @@ function NewWorkspaceModal({
   onCreated: (ws: Workspace) => void;
   onToast: (message: string, isError?: boolean) => void;
 }) {
+  const t = msg();
   const [id, setId] = useState('');
   const [path, setPath] = useState('');
   const [busy, setBusy] = useState(false);
@@ -529,14 +533,14 @@ function NewWorkspaceModal({
       const { workspace } = await api.createWorkspace({ id: id.trim(), path: path.trim() });
       onCreated(workspace);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '등록 실패', true);
+      onToast(err instanceof Error ? err.message : t.registerFailed, true);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title="워크스페이스 추가" onClose={onClose}>
+    <Modal title={t.addWorkspace} onClose={onClose}>
       <div className="field">
         <label>ID</label>
         <input
@@ -545,23 +549,21 @@ function NewWorkspaceModal({
           onChange={(e) => setId(e.target.value)}
           placeholder="my-project"
         />
-        <span className="hint">영문/숫자/밑줄/하이픈</span>
+        <span className="hint">{t.idHint}</span>
       </div>
       <div className="field">
-        <label>경로</label>
+        <label>{t.path}</label>
         <input
           value={path}
           onChange={(e) => setPath(e.target.value)}
           placeholder="~/develop/projects/my-project"
         />
-        <span className="hint">
-          허용 루트: {allowedRoots.join(', ') || '(확인 불가)'}
-        </span>
+        <span className="hint">{t.allowedRoots(allowedRoots.join(', ') || t.unknown)}</span>
       </div>
       <div className="modal-actions">
-        <button onClick={onClose}>취소</button>
+        <button onClick={onClose}>{t.cancel}</button>
         <button className="primary" disabled={!id.trim() || !path.trim() || busy} onClick={() => void submit()}>
-          추가
+          {t.add}
         </button>
       </div>
     </Modal>
@@ -583,6 +585,7 @@ function NewSessionModal({
   onCreated: (s: SessionInfo) => void;
   onToast: (message: string, isError?: boolean) => void;
 }) {
+  const t = msg();
   // 등록된 워크스페이스를 고르거나, 경로를 직접 입력한다.
   const [mode, setMode] = useState<'workspace' | 'path'>(
     workspaces.length > 0 ? 'workspace' : 'path',
@@ -608,33 +611,33 @@ function NewSessionModal({
       });
       onCreated(session);
     } catch (err) {
-      onToast(err instanceof Error ? err.message : '세션 생성 실패', true);
+      onToast(err instanceof Error ? err.message : t.createSessionFailed, true);
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <Modal title="새 세션" onClose={onClose}>
+    <Modal title={t.newSession} onClose={onClose}>
       <div className="field">
-        <label>작업 위치</label>
+        <label>{t.location}</label>
         <div className="tabs" style={{ margin: 0 }}>
           <button
             className={mode === 'workspace' ? 'active' : ''}
             disabled={workspaces.length === 0}
             onClick={() => setMode('workspace')}
           >
-            워크스페이스
+            {t.workspace}
           </button>
           <button className={mode === 'path' ? 'active' : ''} onClick={() => setMode('path')}>
-            경로 직접 입력
+            {t.enterPath}
           </button>
         </div>
       </div>
 
       {mode === 'workspace' ? (
         <div className="field">
-          <label>워크스페이스</label>
+          <label>{t.workspace}</label>
           <select value={wsId} onChange={(e) => setWsId(e.target.value)}>
             {workspaces.map((w) => (
               <option key={w.id} value={w.id}>
@@ -645,7 +648,7 @@ function NewSessionModal({
         </div>
       ) : (
         <div className="field">
-          <label>전체 경로</label>
+          <label>{t.fullPath}</label>
           <input
             autoFocus
             value={path}
@@ -657,37 +660,37 @@ function NewSessionModal({
             spellCheck={false}
           />
           <span className="hint">
-            ~ 사용 가능. 처음 쓰는 경로는 워크스페이스로 자동 등록됩니다.
+            {t.pathHint}
             <br />
-            허용 루트: {allowedRoots.join(', ') || '(확인 불가)'}
+            {t.allowedRoots(allowedRoots.join(', ') || t.unknown)}
           </span>
         </div>
       )}
 
       <div className="field">
-        <label>하위 경로 (선택)</label>
+        <label>{t.subPath}</label>
         <input value={subPath} onChange={(e) => setSubPath(e.target.value)} placeholder="src" />
       </div>
       <div className="field">
-        <label>모델 (선택)</label>
+        <label>{t.model}</label>
         <input
           value={model}
           onChange={(e) => setModel(e.target.value)}
-          placeholder="비워두면 기본값"
+          placeholder={t.modelPlaceholder}
         />
       </div>
       <div className="field">
-        <label>권한 정책</label>
+        <label>{t.policy}</label>
         <select value={policyMode} onChange={(e) => setPolicyMode(e.target.value as PolicyMode)}>
-          <option value="ask-risky">위험한 작업만 확인</option>
-          <option value="ask-all">모두 확인</option>
-          <option value="auto-approve">전부 자동 승인</option>
+          <option value="ask-risky">{t.policyAskRisky}</option>
+          <option value="ask-all">{t.policyAskAll}</option>
+          <option value="auto-approve">{t.policyAutoApprove}</option>
         </select>
       </div>
       <div className="modal-actions">
-        <button onClick={onClose}>취소</button>
+        <button onClick={onClose}>{t.cancel}</button>
         <button className="primary" disabled={busy || !ready} onClick={() => void submit()}>
-          {busy ? '시작하는 중…' : '시작'}
+          {busy ? t.starting : t.start}
         </button>
       </div>
     </Modal>
@@ -705,23 +708,21 @@ function SettingsModal({
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const t = msg();
   const [key, setKey] = useState(getApiKey());
 
   return (
-    <Modal title="설정" onClose={onClose}>
+    <Modal title={t.settings} onClose={onClose}>
       <div className="field">
-        <label>예전 API 키 (선택)</label>
+        <label>{t.legacyApiKey}</label>
         <input
           autoFocus
           type="password"
           value={key}
           onChange={(e) => setKey(e.target.value)}
-          placeholder="서버의 AGENT_API_KEY"
+          placeholder={t.legacyApiKeyPlaceholder}
         />
-        <span className="hint">
-          계정으로 로그인했으면 비워 두세요. 계정이 생기기 전의 방식(AGENT_API_KEY)을 쓰는
-          서버와 맞추려고 남겨 둔 칸입니다. 브라우저에만 저장됩니다.
-        </span>
+        <span className="hint">{t.legacyApiKeyHint}</span>
       </div>
 
       <div className="field">
@@ -732,16 +733,16 @@ function SettingsModal({
             onChange={(e) => onDeleteOnResumeChange(e.target.checked)}
             style={{ width: 'auto' }}
           />
-          이어가기 후 원본 기록 삭제
+          {t.deleteOnResume}
         </label>
         <span className="hint" style={{ color: deleteOnResume ? 'var(--warn)' : undefined }}>
           {deleteOnResume
-            ? '⚠ 이어간 뒤 원본 대화 기록이 영구 삭제됩니다. 되돌릴 수 없습니다.'
-            : '목록에 원본이 함께 남습니다 (기본).'}
+            ? t.deleteOnResumeWarn
+            : t.deleteOnResumeOff}
         </span>
       </div>
       <div className="modal-actions">
-        <button onClick={onClose}>취소</button>
+        <button onClick={onClose}>{t.cancel}</button>
         <button
           className="primary"
           onClick={() => {
@@ -749,7 +750,7 @@ function SettingsModal({
             onSaved();
           }}
         >
-          저장
+          {t.save}
         </button>
       </div>
     </Modal>

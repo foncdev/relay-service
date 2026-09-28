@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 import { api, ApiError, type TerminalInfo } from './api.js';
 import { TerminalView } from './Terminal.js';
 import { ConfirmModal, useToast } from './ui.js';
+import { msg } from './i18n.js';
 
 /**
  * 터미널 탭.
@@ -19,6 +20,7 @@ export const Terminals = memo(TerminalsInner);
  * 다시 그리지 않는다.
  */
 function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
+  const t = msg();
   const [toastNode, toast] = useToast();
 
   const [list, setList] = useState<TerminalInfo[]>([]);
@@ -52,13 +54,13 @@ function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
         return terminals[0]?.id ?? '';
       });
     } catch (e) {
-      const msg =
+      const text =
         e instanceof ApiError && e.code === 'no_agent'
-          ? '맥에서 terminal-agent가 실행 중이 아닙니다.'
+          ? msg().noTerminalAgent
           : e instanceof Error
             ? e.message
-            : '터미널 목록을 불러오지 못했습니다.';
-      setError(msg);
+            : msg().loadTerminalsFailed;
+      setError(text);
     } finally {
       setLoading(false);
     }
@@ -77,9 +79,9 @@ function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
       const { terminal } = await api.createTerminal({ cols: 100, rows: 30 });
       setList((cur) => [...cur, terminal]);
       setActiveId(terminal.id);
-      toast('터미널을 열었습니다.');
+      toast(t.terminalOpened);
     } catch (e) {
-      toast(e instanceof Error ? e.message : '터미널을 열지 못했습니다.');
+      toast(e instanceof Error ? e.message : t.openTerminalFailed);
     }
   };
 
@@ -87,10 +89,10 @@ function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
     try {
       await api.closeTerminal(t.id);
       setList((cur) => cur.filter((x) => x.id !== t.id));
-      toast('터미널을 닫았습니다.');
+      toast(msg().terminalClosed);
       void refresh();
     } catch (e) {
-      toast(e instanceof Error ? e.message : '닫지 못했습니다.');
+      toast(e instanceof Error ? e.message : msg().closeTerminalFailed);
     }
   };
 
@@ -100,7 +102,7 @@ function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
   const active = list.find((t) => t.id === activeId);
 
   if (loading) {
-    return <div className="empty">불러오는 중…</div>;
+    return <div className="empty">{t.loading}</div>;
   }
 
   if (error || agentMissing) {
@@ -109,21 +111,24 @@ function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
       <div className="empty term-empty">
         {disconnected ? (
           <>
-            <p className="term-lost">연결이 끊어졌습니다.</p>
+            <p className="term-lost">{t.disconnected}</p>
             <p className="term-lost-why">
-              맥 콘솔에서 <code>exit</code> 하거나 <code>ctrl+\</code> 로 나가면 terminal-agent가
-              함께 종료됩니다. 웹에서 계속 쓰시려면 맥 콘솔을 켜둔 채로 두세요.
+              {t.disconnectedWhy[0]}
+              <code>exit</code>
+              {t.disconnectedWhy[1]}
+              <code>ctrl+\</code>
+              {t.disconnectedWhy[2]}
             </p>
           </>
         ) : (
-          <p>{error || '맥에서 terminal-agent가 실행 중이 아닙니다.'}</p>
+          <p>{error || t.noTerminalAgent}</p>
         )}
         <pre className="hint">
-{`맥에서 다시 시작:
+{`${t.restartOnMac}
   cd terminal-agent
   make run`}
         </pre>
-        <button onClick={() => void refresh()}>다시 연결</button>
+        <button onClick={() => void refresh()}>{t.reconnect}</button>
         {toastNode}
       </div>
     );
@@ -147,12 +152,12 @@ function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
           </button>
         ))}
         <button className="term-new" onClick={() => void create()}>
-          + 새 터미널
+          {t.newTerminal}
         </button>
         <span className="spacer" />
         {active && (
           <button className="danger" onClick={() => setConfirmClose(active)}>
-            닫기
+            {t.close}
           </button>
         )}
       </div>
@@ -162,16 +167,16 @@ function TerminalsInner({ agentMissing }: { agentMissing?: boolean }) {
         <TerminalView key={active.id} terminal={active} onExit={handleExit} />
       ) : (
         <div className="empty">
-          <p>열린 터미널이 없습니다.</p>
-          <button onClick={() => void create()}>새 터미널 열기</button>
+          <p>{t.noTerminals}</p>
+          <button onClick={() => void create()}>{t.openTerminal}</button>
         </div>
       )}
 
       {confirmClose && (
         <ConfirmModal
-          title="터미널 닫기"
-          message={`${shortDir(confirmClose.dir)} 의 셸을 끝냅니다. 실행 중인 작업이 있으면 함께 중단됩니다.`}
-          confirmLabel="닫기"
+          title={t.closeTerminal}
+          message={t.closeTerminalQ(shortDir(confirmClose.dir))}
+          confirmLabel={t.close}
           danger
           onConfirm={() => {
             void close(confirmClose);
