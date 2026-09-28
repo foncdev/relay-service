@@ -378,6 +378,10 @@ curl -X POST http://호스트:4100/hooks/notify/github \
 
 평문(`text/plain`)과 폼도 받는다.
 
+맥 알림 센터의 알림(카카오톡 맥 버전, 메일 등)은 [notify-agent](https://github.com/foncdev/notify-agent)가
+이 훅(`/hooks/notify/mac`)으로 넘긴다. 폰이 다른 앱 알림을 읽을 수 없는 iOS에서
+쓴다.
+
 | 응답 | 뜻 |
 |---|---|
 | `201` | 알림을 넣었다 |
@@ -562,6 +566,8 @@ web/                    관리 UI (React + Vite)
 - **[terminal-agent](https://github.com/foncdev/terminal-agent)** — 이 서버에 붙는
   터미널 agent. `/terminal-agent`로 접속해 셸을 열어준다. 데스크톱에서 쓰던
   터미널을 여기 관리 UI에서 이어 쓸 수 있다
+- **[notify-agent](https://github.com/foncdev/notify-agent)** — 맥 알림 센터의 알림을 외부 알림 훅으로
+  넘기는 에이전트. `RELAY_HOOK_KEY`를 같이 쓴다
 
 ### 쓰는 것
 
