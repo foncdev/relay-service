@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="relay-service">
+  <rect width="128" height="128" rx="28" fill="#141b30"/>
+  <path d="M64 22v20M64 86v20M22 64h20M86 64h20" stroke="#5b9dff" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="64" cy="20" r="8" fill="#5b9dff"/>
+  <circle cx="64" cy="108" r="8" fill="#5b9dff"/>
+  <circle cx="20" cy="64" r="8" fill="#5b9dff"/>
+  <circle cx="108" cy="64" r="8" fill="#5b9dff"/>
+  <rect x="40" y="40" width="48" height="48" rx="13" fill="#1c2643" stroke="#f3f0e8" stroke-width="7"/>
+  <path d="M53 58h20l-5-5M75 70H55l5 5" fill="none" stroke="#f3f0e8" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

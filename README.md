@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/icon.svg" width="112" alt="relay-service 아이콘"></p>
+
 # relay-service
 
 [![CI](https://github.com/foncdev/relay-service/actions/workflows/ci.yml/badge.svg)](https://github.com/foncdev/relay-service/actions/workflows/ci.yml)
