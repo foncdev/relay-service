@@ -18,7 +18,8 @@
     "web:install": "npm --prefix web install",
     "web:dev": "npm --prefix web run dev",
     "web:build": "npm --prefix web run build",
-    "build:all": "npm run build && npm run web:build"
+    "build:all": "npm run build && npm run web:build",
+    "dev:all": "concurrently -k -n server,web -c blue,magenta \"npm:dev\" \"npm:web:dev\""
   },
   "dependencies": {
     "express": "^4.21.2",
@@ -29,6 +30,7 @@
     "@types/express": "^4.17.21",
     "@types/node": "^22.10.5",
     "@types/ws": "^8.5.13",
+    "concurrently": "^10.0.5",
     "tsx": "^4.19.2",
     "typescript": "~5.7.3"
   },
