@@ -1061,6 +1061,23 @@ termWss.on('connection', (socket, req) => {
   socket.on('close', () => console.log(`[relay] terminal-agent 끊김: ${name}`));
 });
 
+// 확장 에이전트가 남긴 알림(회의 요약 등)을 알림 목록에 넣는다.
+// 어디서 왔는지는 본문 끝에 붙인다. 훅 알림과 같은 모양이다.
+extAgents.onNotify = (notice) => {
+  try {
+    const item = notifications.add({
+      title: notice.title,
+      body: `${notice.body}\n\n— ${notice.agent}`.trim(),
+      kind: notice.kind,
+    });
+    publish('notifications');
+    console.log(`[relay] 확장 에이전트 알림 (${notice.agent}): ${item.title}`);
+    return item.id;
+  } catch {
+    return undefined;
+  }
+};
+
 // --- 확장 에이전트 접속구 ---
 //
 //   ws://<서버>/ext-agent?agent=mac-agent&name=<기기>&protocol=1&token=<RELAY_EXT_TOKEN>

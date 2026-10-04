@@ -468,7 +468,14 @@ ws://<서버>:4100/ext-agent?agent=mac-agent&name=<기기>&protocol=1&token=<REL
 ```
 agent → 서버 : {"type":"hello",        "version","capabilities"}   접속 직후
                {"type":"capabilities", "capabilities"}             권한·라이선스가 바뀌었을 때
+               {"type":"notify",       "ref","title","body","kind"} 알림 목록에 남긴다
+서버 → agent : {"type":"notify_ack",   "ref","ok","id"}
 ```
+
+`notify`는 회의 요약처럼 에이전트가 먼저 알릴 일이 있을 때 쓴다. 알림 키(`RELAY_HOOK_KEY`)
+없이 이미 붙어 있는 연결로 보낸다. 본문 끝에 `— <에이전트 이름>`이 붙고, `kind`는
+`done`·`error`·`info`. 에이전트 하나가 분당 20건까지 남긴다. 넘거나 제목이 비면 넣지 않지만
+`notify_ack`(`ok:false`)는 준다 — 에이전트가 같은 알림을 끝없이 다시 보내지 않게.
 
 `capabilities`는 `[{"id":"present","ready":true}, {"id":"captions","ready":false,"reason":"license_required"}]`
 꼴이다. 못 쓰는 기능도 사유와 함께 보내면 앱이 안내를 띄운다.

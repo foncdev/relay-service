@@ -36,6 +36,17 @@ export interface ExtAgentInfo {
   connectedAt: string;
 }
 
+/** 에이전트가 남기는 알림. 서버가 알림 목록에 넣는다. */
+export interface ExtNotice {
+  agent: string;
+  title: string;
+  body: string;
+  kind: 'done' | 'error' | 'info';
+}
+
+/** 에이전트 하나가 분당 남길 수 있는 알림 수. 고장 난 에이전트가 목록을 덮지 않게. */
+const NOTIFY_PER_MINUTE = 20;
+
 /** 기능 목록이 지나치게 커지지 않게 자른다. 앱 메뉴로 그릴 정도면 충분하다. */
 const MAX_CAPABILITIES = 64;
 
@@ -69,6 +80,12 @@ interface Entry {
 export class ExtAgentHub {
   private readonly entries = new Map<string, Entry>();
 
+  /**
+   * 에이전트가 알림을 남기면 부른다. 알림 저장소는 index.ts가 쥐고 있어 밖에서 꽂는다.
+   * 돌려준 id를 에이전트에 알려 준다(notify_ack) — 에이전트는 이걸 받고서야 보낼 목록에서 지운다.
+   */
+  onNotify: (notice: ExtNotice) => string | undefined = () => undefined;
+
   /** 접속을 받는다. 이름 검사는 호출자가 먼저 한다. */
   add(agentName: string, deviceName: string, protocol: number, socket: WebSocket): string {
     let entry = this.entries.get(agentName);
@@ -87,12 +104,28 @@ export class ExtAgentHub {
     };
     entry.infos.set(agent.id, info);
 
-    // 요청 응답은 AgentRegistry가 받는다. 여기서는 hello와 기능 갱신만 본다.
+    let window = { count: 0, resetAt: 0 };
+
+    // 요청 응답은 AgentRegistry가 받는다. 여기서는 hello·기능 갱신·알림만 본다.
     socket.on('message', (data) => {
-      let msg: { type?: string; version?: unknown; capabilities?: unknown };
+      let msg: { type?: string; version?: unknown; capabilities?: unknown; ref?: unknown; title?: unknown; body?: unknown; kind?: unknown };
       try {
         msg = JSON.parse(data.toString());
       } catch {
+        return;
+      }
+      if (msg.type === 'notify') {
+        const ref = typeof msg.ref === 'string' ? msg.ref.slice(0, 64) : undefined;
+        const now = Date.now();
+        if (now >= window.resetAt) window = { count: 0, resetAt: now + 60_000 };
+        const title = typeof msg.title === 'string' ? msg.title.trim() : '';
+        let id: string | undefined;
+        if (title && ++window.count <= NOTIFY_PER_MINUTE) {
+          const kind = msg.kind === 'done' || msg.kind === 'error' ? msg.kind : 'info';
+          id = this.onNotify({ agent: agentName, title, body: typeof msg.body === 'string' ? msg.body : '', kind });
+        }
+        // 받지 못했어도 알린다. 에이전트가 같은 알림을 끝없이 다시 보내지 않게.
+        if (ref) socket.send(JSON.stringify({ type: 'notify_ack', ref, ok: id !== undefined, id }));
         return;
       }
       if (msg.type !== 'hello' && msg.type !== 'capabilities') return;

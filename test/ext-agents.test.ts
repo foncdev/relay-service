@@ -218,3 +218,53 @@ test('/ext/<이름>/…/stream은 claudeAgent가 아니라 그 에이전트로 �
     s.stop();
   }
 });
+
+/** notify를 보내고 notify_ack를 기다린다. */
+function notify(ws: WebSocket, ref: string, title: string, body = ''): Promise<{ ok: boolean; id?: string }> {
+  return new Promise((resolve) => {
+    const onMessage = (d: Buffer) => {
+      const msg = JSON.parse(d.toString()) as { type: string; ref: string; ok: boolean; id?: string };
+      if (msg.type !== 'notify_ack' || msg.ref !== ref) return;
+      ws.off('message', onMessage);
+      resolve(msg);
+    };
+    ws.on('message', onMessage);
+    ws.send(JSON.stringify({ type: 'notify', ref, title, body, kind: 'done' }));
+  });
+}
+
+test('에이전트가 남긴 알림이 알림 목록에 들어가고 ack를 받는다', async () => {
+  const s = await startServer();
+  try {
+    const { ws } = await connect(s.port, `agent=mac-agent&name=test-mac&token=${EXT_TOKEN}`);
+    const ack = await notify(ws, 'r1', '회의 요약', '출시일 11월 3일 확정');
+    assert.equal(ack.ok, true);
+    assert.ok(ack.id);
+
+    const list = (await (await s.get('/notifications')).json()) as { items: { id: string; title: string; body: string; kind: string }[] };
+    const item = list.items.find((n) => n.id === ack.id);
+    assert.equal(item?.title, '회의 요약');
+    assert.equal(item?.kind, 'done');
+    assert.match(item?.body ?? '', /출시일 11월 3일 확정\n\n— mac-agent$/, '어디서 왔는지 본문 끝에 붙는다');
+
+    // 제목이 없으면 넣지 않지만 ack는 준다 — 에이전트가 끝없이 다시 보내지 않게.
+    assert.equal((await notify(ws, 'r2', '  ')).ok, false);
+    ws.close();
+  } finally {
+    s.stop();
+  }
+});
+
+test('에이전트 하나가 알림을 쏟아내면 분당 20건에서 끊는다', async () => {
+  const s = await startServer();
+  try {
+    const { ws } = await connect(s.port, `agent=mac-agent&name=test-mac&token=${EXT_TOKEN}`);
+    const acks = [];
+    for (let i = 0; i < 22; i++) acks.push(await notify(ws, `n${i}`, `알림 ${i}`));
+    assert.equal(acks.filter((a) => a.ok).length, 20);
+    assert.equal(acks[20].ok, false);
+    ws.close();
+  } finally {
+    s.stop();
+  }
+});
