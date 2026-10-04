@@ -43,6 +43,14 @@ export const config = {
   terminalToken: process.env.RELAY_TERMINAL_TOKEN ?? '',
 
   /**
+   * 확장 에이전트(mac-agent 등)가 접속할 때 쓰는 토큰.
+   *
+   * 다른 토큰과 따로 둔다. 확장 에이전트는 따로 운영하는 제품이라
+   * 이 토큰이 새도 agent-cli나 셸까지 넘어가지 않게 한다. 비워두면 접속을 받지 않는다.
+   */
+  extToken: process.env.RELAY_EXT_TOKEN ?? '',
+
+  /**
    * 안경앱 정적 파일. 루트(/)에서 서빙한다.
    * G2가 QR로 루트를 여므로 이 경로를 유지한다.
    */
@@ -108,6 +116,9 @@ export function warnings(): string[] {
   }
   if (config.agentToken && config.agentToken.length < 24) {
     out.push('RELAY_AGENT_TOKEN이 짧습니다. 24자 이상을 권합니다.');
+  }
+  if (config.extToken && config.extToken.length < 24) {
+    out.push('RELAY_EXT_TOKEN이 짧습니다. 24자 이상을 권합니다.');
   }
   // 훅 키는 남에게 건네는 값이라 짧으면 더 위험하다.
   if (config.hookKey && config.hookKey.length < 24) {

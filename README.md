@@ -117,15 +117,17 @@ openssl rand -base64 24   # 하나씩 따로 만든다
 |---|---|---|
 | `RELAY_AGENT_TOKEN` | 일반 agent | agent 접속을 받지 않는다 |
 | `RELAY_TERMINAL_TOKEN` | [terminal-agent](https://github.com/foncdev/terminal-agent) | 터미널 접속을 받지 않는다 |
+| `RELAY_EXT_TOKEN` | 확장 에이전트(mac-agent 등) | 확장 에이전트 접속을 받지 않는다 |
 | `RELAY_HOOK_KEY` | 외부 알림 훅 | 훅이 닫힌다 (`503`) |
 
-세 값은 **서로 다르게** 둔다. 바꾼 뒤에는 서버를 다시 띄운다.
+네 값은 **서로 다르게** 둔다. 바꾼 뒤에는 서버를 다시 띄운다.
 
 **3. agent를 붙인다.** agent 쪽에 서버 주소와 토큰을 준다.
 
 ```
 ws://<서버>:4100/agent?name=<이름>&token=<RELAY_AGENT_TOKEN>
 ws://<서버>:4100/terminal-agent?name=<이름>&token=<RELAY_TERMINAL_TOKEN>
+ws://<서버>:4100/ext-agent?agent=<에이전트>&name=<이름>&protocol=1&token=<RELAY_EXT_TOKEN>
 ```
 
 붙으면 서버 로그에 `agent 접속`이 찍히고, 관리 UI의 해당 탭이 "미연결"에서
@@ -446,6 +448,41 @@ agent는 받은 요청을 자기 HTTP API로 대신 호출해 결과를 돌려�
 
 같은 종류의 agent가 여럿 붙으면 **먼저 붙은 쪽**을 쓴다.
 
+### 확장 에이전트
+
+mac-agent처럼 따로 운영하는 에이전트가 쓰는 일반 통로다. 서버는 에이전트가
+무엇을 하는지 모른다. 이름으로 나눠 넘기고, 에이전트가 알린 기능 목록을 보여
+줄 뿐이다. 유료 여부도 에이전트가 스스로 판단한다.
+
+```
+ws://<서버>:4100/ext-agent?agent=mac-agent&name=<기기>&protocol=1&token=<RELAY_EXT_TOKEN>
+```
+
+- `agent`: 경로에 쓰일 이름. 영문 소문자·숫자·`-`로 2~40자.
+- `name`: 기기 이름. 화면 표시용이다.
+- `protocol`: 에이전트가 따르는 규약 버전. 서버는 버전이 달라도 받고,
+  `welcome`에 자기 버전(`"protocol": 1`)을 실어 보낸다. 맞출지는 에이전트가 정한다.
+
+요청·스트림 메시지는 위와 같다. 여기에 두 가지를 더한다:
+
+```
+agent → 서버 : {"type":"hello",        "version","capabilities"}   접속 직후
+               {"type":"capabilities", "capabilities"}             권한·라이선스가 바뀌었을 때
+```
+
+`capabilities`는 `[{"id":"present","ready":true}, {"id":"captions","ready":false,"reason":"license_required"}]`
+꼴이다. 못 쓰는 기능도 사유와 함께 보내면 앱이 안내를 띄운다.
+
+클라이언트 쪽 경로:
+
+| 경로 | 하는 일 |
+|---|---|
+| `GET /ext` | 붙어 있는 확장 에이전트와 각자의 기능 목록 |
+| `/ext/<에이전트>/<나머지>` | 그 에이전트에 `/<나머지>`로 넘긴다. 에이전트는 자기 경로만 알면 된다 |
+| `/ext/<에이전트>/…/stream` | SSE로 중계한다 |
+
+붙지 않은 에이전트로 보내면 `503 no_agent`가 돌아온다.
+
 ---
 
 ## 설정
@@ -457,6 +494,7 @@ agent는 받은 요청을 자기 HTTP API로 대신 호출해 결과를 돌려�
 | `RELAY_CLIENT_KEY` | (없음) | 레거시 클라이언트 키. 로그인 없이 모든 경로를 연다. 24자보다 짧으면 받지 않는다 |
 | `RELAY_HOOK_KEY` | (없음) | 외부 알림 훅 전용 키. 클라이언트 키와 다르게 둔다. **비우면 훅 닫힘** |
 | `RELAY_TERMINAL_TOKEN` | (없음) | 터미널 agent 접속 토큰. **비우면 접속 거부** |
+| `RELAY_EXT_TOKEN` | (없음) | 확장 에이전트 접속 토큰. **비우면 접속 거부** |
 | `RELAY_TOKEN_TTL_DAYS` | `30` | 로그인 토큰 유효기간 |
 | `RELAY_WEB_ROOT` | `./web/dist` | `/web`에 서빙할 관리 UI |
 | `RELAY_GLASSES_ROOT` | `../glasses-g2/dist` | `/`에 서빙할 안경앱 |

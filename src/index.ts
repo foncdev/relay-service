@@ -15,6 +15,7 @@ import { WebSocketServer } from 'ws';
 import { clientKeyUsable, config, warnings } from './core/config.js';
 import { agents, AgentRegistry } from './core/agents.js';
 import { termAgents } from './core/term-agents.js';
+import { EXT_PROTOCOL, extAgents, isExtAgentName } from './core/ext-agents.js';
 import { checklists, ChecklistError, GLOBAL_LIST } from './core/checklist.js';
 import { notifications, type NotificationKind } from './core/notifications.js';
 import { BANNER, TAGLINE } from './core/banner.js';
@@ -166,7 +167,7 @@ function isProtected(p: string): boolean {
   if (/^\/auth\/(status|setup|login|logout)$/.test(p)) return false;
   // terminals를 빠뜨리면 셸이 무인증으로 열린다. 반드시 포함해야 한다.
   // health도 막는다 — 응답에 allowedRoots(서버 경로)가 들어 있다.
-  return /^\/(sessions|workspaces|jobs|files|terminals|sys|run|snippets|health|checklist|notifications|motd|auth|events)\b/.test(p);
+  return /^\/(sessions|workspaces|jobs|files|terminals|sys|run|snippets|health|checklist|notifications|motd|auth|events|ext)\b/.test(p);
 }
 
 /**
@@ -770,6 +771,7 @@ async function forward(
   label: string,
   req: Request,
   res: Response,
+  target = req.originalUrl,
 ): Promise<void> {
   const agent = reg.default();
   if (!agent) {
@@ -783,7 +785,7 @@ async function forward(
     const body = req.method === 'GET' || req.method === 'DELETE'
       ? undefined
       : JSON.stringify(req.body ?? {});
-    const reply = await agent.request(req.method, req.originalUrl, body);
+    const reply = await agent.request(req.method, target, body);
     res.status(reply.status).type('application/json').send(reply.body);
   } catch (err) {
     res.status(502).json({
@@ -793,7 +795,7 @@ async function forward(
 }
 
 /** SSE를 맥에서 받아 클라이언트로 흘려보낸다. */
-function forwardStream(reg: AgentRegistry, req: Request, res: Response): void {
+function forwardStream(reg: AgentRegistry, req: Request, res: Response, target = req.originalUrl): void {
   const agent = reg.default();
   if (!agent) {
     res.status(503).end();
@@ -808,7 +810,7 @@ function forwardStream(reg: AgentRegistry, req: Request, res: Response): void {
   });
   res.flushHeaders();
 
-  const stop = agent.openStream(req.originalUrl, (chunk, done) => {
+  const stop = agent.openStream(target, (chunk, done) => {
     if (chunk) res.write(chunk);
     if (done) res.end();
   });
@@ -869,6 +871,51 @@ app.get('/events', (req, res) => {
 // 터미널 스트림을 앞에 둔다. 뒤에 두면 아래의 일반 /stream 규칙이
 // 먼저 잡아 claudeAgent 쪽으로 새버린다.
 app.get(/^\/terminals\b.*\/stream$/, (req, res) => forwardStream(termAgents, req, res));
+
+// --- 확장 에이전트 ---
+//
+// mac-agent처럼 따로 운영하는 에이전트가 쓰는 통로. 서버는 에이전트가 하는
+// 일을 모르고, 이름으로 나눠 넘기기만 한다. 유료 여부도 에이전트가 스스로 판단한다.
+//
+// 일반 /stream 규칙보다 앞에 둔다. 뒤에 두면 claudeAgent 쪽으로 샌다.
+
+/** 붙어 있는 확장 에이전트와 각자의 기능 목록. 앱이 이걸 보고 메뉴를 그린다. */
+app.get('/ext', (_req, res) => {
+  res.json({ protocol: EXT_PROTOCOL, agents: extAgents.list() });
+});
+
+/**
+ * /ext/<이름>/나머지 → 그 에이전트의 /나머지.
+ * 에이전트는 자기 경로만 알면 된다. 서버에 어떤 이름으로 붙었는지 몰라도 된다.
+ */
+function extTarget(req: Request): { name: string; target: string } {
+  const name = String(req.params[0]);
+  const target = req.originalUrl.slice(`/ext/${name}`.length);
+  return { name, target: target.startsWith('/') ? target : `/${target}` };
+}
+
+function noExtAgent(res: Response, name: string): void {
+  res.status(503).json({
+    error: {
+      code: 'no_agent',
+      message: L(`연결된 ${name}가 없습니다.`, `No ${name} connected.`),
+    },
+  });
+}
+
+app.get(/^\/ext\/([^/]+)(?:\/.*)?\/stream$/, (req, res) => {
+  const { name, target } = extTarget(req);
+  const reg = isExtAgentName(name) ? extAgents.registry(name) : undefined;
+  if (!reg) return noExtAgent(res, name);
+  forwardStream(reg, req, res, target);
+});
+
+app.all(/^\/ext\/([^/?]+)(?:\/.*)?$/, (req, res) => {
+  const { name, target } = extTarget(req);
+  const reg = isExtAgentName(name) ? extAgents.registry(name) : undefined;
+  if (!reg) return noExtAgent(res, name);
+  void forward(reg, name, req, res, target);
+});
 app.get(/\/stream$/, (req, res) => forwardStream(agents, req, res));
 
 app.all(/^\/terminals\b/, (req, res) => void forward(termAgents, 'terminal-agent', req, res));
@@ -896,7 +943,7 @@ if (fs.existsSync(config.webRoot)) {
 // 안경앱은 루트에 둔다. G2가 QR로 루트를 열기 때문이다.
 if (fs.existsSync(config.glassesRoot)) {
   app.use(express.static(config.glassesRoot));
-  app.get(/^(?!\/(relay|auth|sessions|workspaces|jobs|files|terminals|sys|run|snippets|health|web)\b).*/, (req, res, next) => {
+  app.get(/^(?!\/(relay|auth|sessions|workspaces|jobs|files|terminals|sys|run|snippets|health|web|ext)\b).*/, (req, res, next) => {
     if (req.method !== 'GET') return next();
     res.sendFile(path.join(config.glassesRoot, 'index.html'));
   });
@@ -939,6 +986,7 @@ const server = http.createServer(app);
  */
 const wss = new WebSocketServer({ noServer: true });
 const termWss = new WebSocketServer({ noServer: true });
+const extWss = new WebSocketServer({ noServer: true });
 
 server.on('upgrade', (req, socket, head) => {
   const { pathname } = new URL(req.url ?? '/', 'http://localhost');
@@ -949,6 +997,10 @@ server.on('upgrade', (req, socket, head) => {
   }
   if (pathname === '/terminal-agent') {
     termWss.handleUpgrade(req, socket, head, (ws) => termWss.emit('connection', ws, req));
+    return;
+  }
+  if (pathname === '/ext-agent') {
+    extWss.handleUpgrade(req, socket, head, (ws) => extWss.emit('connection', ws, req));
     return;
   }
 
@@ -1009,11 +1061,48 @@ termWss.on('connection', (socket, req) => {
   socket.on('close', () => console.log(`[relay] terminal-agent 끊김: ${name}`));
 });
 
+// --- 확장 에이전트 접속구 ---
+//
+//   ws://<서버>/ext-agent?agent=mac-agent&name=<기기>&protocol=1&token=<RELAY_EXT_TOKEN>
+//
+// agent는 경로(/ext/<agent>)에 쓰일 이름, name은 기기 이름이다.
+// 규약 버전이 달라도 받는다. welcome에 서버 쪽 버전을 실어 보내고, 맞출지는
+// 에이전트가 정한다 — 어느 쪽이 먼저 업데이트돼도 끊기지 않게 하려는 것이다.
+extWss.on('connection', (socket, req) => {
+  const url = new URL(req.url ?? '/', 'http://localhost');
+  const token = url.searchParams.get('token') ?? '';
+  const agentName = url.searchParams.get('agent') ?? '';
+  const name = (url.searchParams.get('name') || '이름 없는 기기').slice(0, 60);
+  const protocol = Number(url.searchParams.get('protocol') ?? 1) || 1;
+
+  if (!config.extToken) {
+    logAuthFailure(req.socket.remoteAddress ?? 'unknown', '/ext-agent');
+    socket.close(1008, 'RELAY_EXT_TOKEN이 설정되지 않았습니다.');
+    return;
+  }
+  if (!safeEqual(token, config.extToken)) {
+    logAuthFailure(req.socket.remoteAddress ?? 'unknown', '/ext-agent');
+    socket.close(1008, '토큰이 올바르지 않습니다.');
+    return;
+  }
+  if (!isExtAgentName(agentName)) {
+    socket.close(1008, 'agent 이름이 올바르지 않습니다. 영문 소문자·숫자·-로 2~40자.');
+    return;
+  }
+
+  const id = extAgents.add(agentName, name, protocol, socket);
+  console.log(`[relay] 확장 에이전트 접속: ${agentName} · ${name} (${id.slice(0, 8)})`);
+  socket.send(JSON.stringify({ type: 'welcome', agentId: id, protocol: EXT_PROTOCOL }));
+
+  socket.on('close', () => console.log(`[relay] 확장 에이전트 끊김: ${agentName} · ${name}`));
+});
+
 server.listen(config.port, config.host, () => {
   console.log(`\n${BANNER}\n${' '.repeat(20)}${TAGLINE}\n`);
   console.log(`[relay] http://${config.host}:${config.port}`);
   console.log(`[relay] agent 접속구: ws://${config.host}:${config.port}/agent`);
   console.log(`[relay] 터미널 접속구: ws://${config.host}:${config.port}/terminal-agent`);
+  console.log(`[relay] 확장 접속구: ws://${config.host}:${config.port}/ext-agent`);
   console.log(`[relay] 안경앱 /     : ${fs.existsSync(config.glassesRoot) ? config.glassesRoot : '(없음)'}`);
   console.log(`[relay] 웹 UI  /web  : ${fs.existsSync(config.webRoot) ? config.webRoot : '(없음)'}`);
   for (const w of warnings()) console.warn(`[relay] 경고: ${w}`);
