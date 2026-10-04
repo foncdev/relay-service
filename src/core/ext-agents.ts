@@ -44,6 +44,21 @@ export interface ExtNotice {
   kind: 'done' | 'error' | 'info';
 }
 
+/**
+ * 에이전트가 전역 체크리스트를 다루는 요청. 미리 알림 동기화 같은 데 쓴다.
+ * op: list · add({id, text}) · update({itemId, text}) · toggle({itemId, done}) · remove({itemId})
+ */
+export interface ExtChecklistRequest {
+  agent: string;
+  op: string;
+  id?: string;
+  itemId?: string;
+  text?: string;
+  done?: boolean;
+}
+
+export type ExtChecklistReply = { ok: true; [key: string]: unknown } | { ok: false; error: string };
+
 /** 에이전트 하나가 분당 남길 수 있는 알림 수. 고장 난 에이전트가 목록을 덮지 않게. */
 const NOTIFY_PER_MINUTE = 20;
 
@@ -86,6 +101,24 @@ export class ExtAgentHub {
    */
   onNotify: (notice: ExtNotice) => string | undefined = () => undefined;
 
+  /** 체크리스트 요청. 저장소는 index.ts가 쥐고 있어 밖에서 꽂는다. */
+  onChecklist: (req: ExtChecklistRequest) => ExtChecklistReply = () => ({ ok: false, error: 'unavailable' });
+
+  /** 붙어 있는 소켓 전부. 자료가 바뀌었다고 알릴 때 쓴다. */
+  private readonly sockets = new Set<WebSocket>();
+
+  /** 서버 자료가 바뀌었다고 모든 확장 에이전트에 알린다. 무엇이 바뀌었는지만 보낸다. */
+  broadcast(topic: string): void {
+    const msg = JSON.stringify({ type: 'changed', topic });
+    for (const s of this.sockets) {
+      try {
+        s.send(msg);
+      } catch {
+        // 끊긴 소켓은 close에서 빠진다.
+      }
+    }
+  }
+
   /** 접속을 받는다. 이름 검사는 호출자가 먼저 한다. */
   add(agentName: string, deviceName: string, protocol: number, socket: WebSocket): string {
     let entry = this.entries.get(agentName);
@@ -105,10 +138,14 @@ export class ExtAgentHub {
     entry.infos.set(agent.id, info);
 
     let window = { count: 0, resetAt: 0 };
+    this.sockets.add(socket);
 
     // 요청 응답은 AgentRegistry가 받는다. 여기서는 hello·기능 갱신·알림만 본다.
     socket.on('message', (data) => {
-      let msg: { type?: string; version?: unknown; capabilities?: unknown; ref?: unknown; title?: unknown; body?: unknown; kind?: unknown };
+      let msg: {
+        type?: string; version?: unknown; capabilities?: unknown; ref?: unknown; title?: unknown; body?: unknown; kind?: unknown;
+        op?: unknown; id?: unknown; itemId?: unknown; text?: unknown; done?: unknown;
+      };
       try {
         msg = JSON.parse(data.toString());
       } catch {
@@ -128,11 +165,33 @@ export class ExtAgentHub {
         if (ref) socket.send(JSON.stringify({ type: 'notify_ack', ref, ok: id !== undefined, id }));
         return;
       }
+      if (msg.type === 'checklist') {
+        const ref = typeof msg.ref === 'string' ? msg.ref.slice(0, 64) : '';
+        const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+        let reply: ExtChecklistReply;
+        try {
+          reply = this.onChecklist({
+            agent: agentName,
+            op: str(msg.op) ?? '',
+            id: str(msg.id),
+            itemId: str(msg.itemId),
+            text: str(msg.text),
+            done: typeof msg.done === 'boolean' ? msg.done : undefined,
+          });
+        } catch (err) {
+          reply = { ok: false, error: (err as Error).message };
+        }
+        socket.send(JSON.stringify({ type: 'checklist_reply', ref, ...reply }));
+        return;
+      }
       if (msg.type !== 'hello' && msg.type !== 'capabilities') return;
       if (typeof msg.version === 'string') info.version = msg.version.slice(0, 40);
       if ('capabilities' in msg) info.capabilities = sanitizeCapabilities(msg.capabilities);
     });
-    socket.on('close', () => entry.infos.delete(agent.id));
+    socket.on('close', () => {
+      entry.infos.delete(agent.id);
+      this.sockets.delete(socket);
+    });
 
     return agent.id;
   }

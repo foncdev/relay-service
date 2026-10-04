@@ -268,3 +268,70 @@ test('에이전트 하나가 알림을 쏟아내면 분당 20건에서 끊는다
     s.stop();
   }
 });
+
+/** checklist 요청을 보내고 답을 기다린다. */
+function checklist(ws: WebSocket, ref: string, body: Record<string, unknown>): Promise<Record<string, unknown>> {
+  return new Promise((resolve) => {
+    const onMessage = (d: Buffer) => {
+      const msg = JSON.parse(d.toString()) as { type: string; ref: string };
+      if (msg.type !== 'checklist_reply' || msg.ref !== ref) return;
+      ws.off('message', onMessage);
+      resolve(msg as unknown as Record<string, unknown>);
+    };
+    ws.on('message', onMessage);
+    ws.send(JSON.stringify({ type: 'checklist', ref, ...body }));
+  });
+}
+
+test('에이전트가 전역 체크리스트를 다루고, 할 일마다 알림을 남기지 않는다', async () => {
+  const s = await startServer();
+  try {
+    const { ws } = await connect(s.port, `agent=mac-agent&name=test-mac&token=${EXT_TOKEN}`);
+    const added = await checklist(ws, 'a', { op: 'add', id: 'reminder-0001', text: '우유 사기' });
+    assert.equal(added.ok, true);
+    // 같은 id로 다시 넣어도 하나다(동기화가 끊겼다 다시 보내도).
+    await checklist(ws, 'a2', { op: 'add', id: 'reminder-0001', text: '우유 사기' });
+    await checklist(ws, 'b', { op: 'toggle', itemId: 'reminder-0001', done: true });
+    await checklist(ws, 'c', { op: 'update', itemId: 'reminder-0001', text: '두유 사기' });
+
+    const list = (await checklist(ws, 'd', { op: 'list' })) as { items: { id: string; text: string; done: boolean }[] };
+    assert.deepEqual(list.items.map((i) => [i.id, i.text, i.done]), [['reminder-0001', '두유 사기', true]]);
+
+    // 웹에서 보는 목록도 같다.
+    const web = (await (await s.get('/checklist')).json()) as { items: { id: string }[] };
+    assert.deepEqual(web.items.map((i) => i.id), ['reminder-0001']);
+
+    const notes = (await (await s.get('/notifications')).json()) as { items: unknown[] };
+    assert.equal(notes.items.length, 0, '동기화로 바뀐 것은 알림을 남기지 않는다');
+
+    assert.equal((await checklist(ws, 'e', { op: 'remove', itemId: 'reminder-0001' })).ok, true);
+    assert.equal((await checklist(ws, 'f', { op: 'remove', itemId: 'reminder-0001' })).ok, false);
+    assert.equal((await checklist(ws, 'g', { op: 'nope' })).ok, false);
+    ws.close();
+  } finally {
+    s.stop();
+  }
+});
+
+test('체크리스트가 바뀌면 확장 에이전트에 changed를 보낸다', async () => {
+  const s = await startServer();
+  try {
+    const { ws } = await connect(s.port, `agent=mac-agent&name=test-mac&token=${EXT_TOKEN}`);
+    const changed = new Promise<string>((resolve) => {
+      ws.on('message', (d) => {
+        const msg = JSON.parse(d.toString()) as { type: string; topic?: string };
+        if (msg.type === 'changed') resolve(msg.topic ?? '');
+      });
+    });
+    // 웹에서 할 일을 더한다.
+    await fetch(`${s.base}/checklist`, {
+      method: 'POST',
+      headers: { authorization: `Bearer ${s.token}`, 'content-type': 'application/json' },
+      body: JSON.stringify({ text: '웹에서 넣은 일' }),
+    });
+    assert.equal(await changed, 'checklist');
+    ws.close();
+  } finally {
+    s.stop();
+  }
+});

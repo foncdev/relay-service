@@ -469,8 +469,17 @@ ws://<서버>:4100/ext-agent?agent=mac-agent&name=<기기>&protocol=1&token=<REL
 agent → 서버 : {"type":"hello",        "version","capabilities"}   접속 직후
                {"type":"capabilities", "capabilities"}             권한·라이선스가 바뀌었을 때
                {"type":"notify",       "ref","title","body","kind"} 알림 목록에 남긴다
+               {"type":"checklist",    "ref","op",…}               전역 할 일을 다룬다
 서버 → agent : {"type":"notify_ack",   "ref","ok","id"}
+               {"type":"checklist_reply","ref","ok",…}
+               {"type":"changed",      "topic"}                     할 일이 바뀌었다(topic: checklist)
 ```
+
+`checklist`는 미리 알림 동기화 같은 데 쓴다. `op`는 `list` · `add`(`id`, `text` — 같은 id면 하나만) ·
+`update`(`itemId`, `text`) · `toggle`(`itemId`, `done`) · `remove`(`itemId`). 웹·안경에서 고칠 때와 달리
+**할 일마다 알림을 남기지 않는다** — 동기화가 수십 개를 맞추면 그만큼 알림과 안경 팝업이 쌓인다.
+바뀌었다는 신호는 보내므로 안경·폰 목록은 바로 따라온다. 할 일이 바뀌면(어디서든) 모든 확장
+에이전트에 `changed`를 보낸다.
 
 `notify`는 회의 요약처럼 에이전트가 먼저 알릴 일이 있을 때 쓴다. 알림 키(`RELAY_HOOK_KEY`)
 없이 이미 붙어 있는 연결로 보낸다. 본문 끝에 `— <에이전트 이름>`이 붙고, `kind`는

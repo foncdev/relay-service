@@ -1078,6 +1078,44 @@ extAgents.onNotify = (notice) => {
   }
 };
 
+// 확장 에이전트가 전역 체크리스트를 다룬다(미리 알림 동기화 등).
+//
+// 웹·안경에서 고칠 때와 달리 할 일마다 알림을 남기지 않는다. 동기화가 수십 개를
+// 한꺼번에 맞추면 그만큼 알림이 쌓이고 안경에 팝업이 연달아 뜬다. 바뀌었다는
+// 신호(publish)는 보낸다 — 안경·폰 목록이 바로 따라오게.
+extAgents.onChecklist = (req) => {
+  const changed = (reply: { ok: true; [k: string]: unknown }) => {
+    publish('checklist');
+    return reply;
+  };
+  switch (req.op) {
+    case 'list':
+      return { ok: true, items: checklists.list(GLOBAL_LIST) };
+    case 'add': {
+      if (!req.id || !req.text) return { ok: false, error: 'id와 text가 필요합니다.' };
+      const { item, created } = checklists.addWithId(GLOBAL_LIST, req.id, req.text);
+      return created ? changed({ ok: true, item }) : { ok: true, item };
+    }
+    case 'update': {
+      const item = req.itemId && req.text ? checklists.update(GLOBAL_LIST, req.itemId, req.text) : undefined;
+      return item ? changed({ ok: true, item }) : { ok: false, error: 'not_found' };
+    }
+    case 'toggle': {
+      const item = req.itemId ? checklists.toggle(GLOBAL_LIST, req.itemId, req.done) : undefined;
+      return item ? changed({ ok: true, item }) : { ok: false, error: 'not_found' };
+    }
+    case 'remove':
+      return req.itemId && checklists.remove(GLOBAL_LIST, req.itemId) ? changed({ ok: true }) : { ok: false, error: 'not_found' };
+    default:
+      return { ok: false, error: `모르는 op: ${req.op}` };
+  }
+};
+
+// 체크리스트가 바뀌면(웹·안경·폰·에이전트 어디서든) 확장 에이전트에도 알린다.
+subscribe((topic) => {
+  if (topic === 'checklist') extAgents.broadcast('checklist');
+});
+
 // --- 확장 에이전트 접속구 ---
 //
 //   ws://<서버>/ext-agent?agent=mac-agent&name=<기기>&protocol=1&token=<RELAY_EXT_TOKEN>
