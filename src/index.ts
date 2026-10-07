@@ -322,6 +322,8 @@ const startedAt = Date.now();
  */
 app.get('/motd', (_req, res) => {
   const list = agents.list();
+  // 확장 에이전트(mac-agent·win-agent). 붙은 것이 있을 때만 한 줄 보인다.
+  const exts = extAgents.list();
   const notifs = notifications.list();
   const todos = checklists.list(GLOBAL_LIST);
   const up = Math.floor((Date.now() - startedAt) / 1000);
@@ -344,10 +346,17 @@ app.get('/motd', (_req, res) => {
             `${list.length} agent${list.length === 1 ? '' : 's'} connected (${list.map((a) => a.name).join(', ')})`,
           )
         : L('agent 미연결 — 맥에서 agent-cli를 실행하세요', 'No agent connected — run agent-cli on the Mac'),
+      ...(exts.length > 0
+        ? [L(
+            `컴퓨터 ${exts.length}대 연결됨 (${exts.map((e) => `${e.agent} ${e.name}`).join(', ')})`,
+            `${exts.length} computer${exts.length === 1 ? '' : 's'} connected (${exts.map((e) => `${e.agent} ${e.name}`).join(', ')})`,
+          )]
+        : []),
       L(`알림 ${unread}건 · 할 일 ${open}건 남음`, `${unread} unread · ${open} to-do${open === 1 ? '' : 's'} left`),
     ],
 
     agents: list.length,
+    extAgents: exts.length,
     unread: notifs.filter((n) => !n.readAt).length,
     todos: todos.filter((t) => !t.done).length,
   });

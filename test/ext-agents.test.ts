@@ -165,6 +165,23 @@ test('hello로 알린 기능 목록이 GET /ext에 나온다', async () => {
   }
 });
 
+test('붙은 확장 에이전트가 접속 요약(motd)에 한 줄로 보인다', async () => {
+  const s = await startServer();
+  try {
+    const before = (await (await s.get('/motd')).json()) as { lines: string[]; extAgents: number };
+    assert.equal(before.extAgents, 0);
+    assert.ok(!before.lines.some((l) => l.startsWith('컴퓨터')), '없으면 줄도 없다');
+
+    const { ws } = await connect(s.port, `agent=win-agent&name=office-pc&protocol=1&token=${EXT_TOKEN}`);
+    const after = (await (await s.get('/motd')).json()) as { lines: string[]; extAgents: number };
+    assert.equal(after.extAgents, 1);
+    assert.ok(after.lines.includes('컴퓨터 1대 연결됨 (win-agent office-pc)'), after.lines.join(' | '));
+    ws.close();
+  } finally {
+    s.stop();
+  }
+});
+
 test('/ext/<이름>/나머지는 에이전트에 /나머지로 넘어간다', async () => {
   const s = await startServer();
   try {
