@@ -231,6 +231,103 @@ export interface AuthStatus {
   username: string;
 }
 
+// --- 모니터링 (relay GET /monitor) ---
+
+export type MonitorState = 'down' | 'crit' | 'warn' | 'ok' | 'unknown';
+export type MonitorCounts = Record<MonitorState, number>;
+
+export interface MonitorMetric {
+  key: string;
+  label: string;
+  value: number;
+  unit: string;
+  max?: number;
+  state: MonitorState;
+}
+
+export interface MonitorItem {
+  id: string;
+  name: string;
+  state: MonitorState;
+  metrics: MonitorMetric[];
+  services: Array<{ name: string; up: boolean }>;
+}
+
+export interface MonitorGroup {
+  id: string;
+  name: string;
+  state: MonitorState;
+  counts: MonitorCounts;
+  servicesUp: number;
+  servicesTotal: number;
+  items: MonitorItem[];
+}
+
+export interface MonitorSnapshot {
+  enabled: boolean;
+  source: string;
+  updatedAt?: string;
+  error?: string;
+  stale?: boolean;
+  state: MonitorState;
+  counts: MonitorCounts;
+  groups: MonitorGroup[];
+}
+
+/** 지표 정의. 서버 지표와 업무 지표가 함께 쓴다(업무 지표는 group·item·sql·datasourceUid가 더 있다). */
+export interface MetricDef {
+  key: string;
+  label: string;
+  query: string;
+  unit: string;
+  max?: number;
+  warn?: number;
+  crit?: number;
+  lowerIsWorse?: boolean;
+  group?: string;
+  item?: string;
+  sql?: string;
+  datasourceUid?: string;
+}
+
+export type MonitorMode = 'grafana' | 'demo' | 'off';
+
+export interface MonitorConfigView {
+  mode: MonitorMode;
+  refreshSeconds: number;
+  grafana: { url: string; datasourceUid: string };
+  serverLabel: string;
+  stripPort: boolean;
+  groupLabel: string;
+  groups: Record<string, string[]>;
+  metrics: MetricDef[];
+  services: { query: string; nameLabel: string } | null;
+  stats: MetricDef[];
+}
+
+export interface MonitorConfigReply {
+  effective: MonitorConfigView;
+  hasToken: boolean;
+  tokenFrom: 'env' | 'saved' | '';
+  locks: { mode: boolean; url: boolean; token: boolean; datasourceUid: boolean };
+  configFile: string | null;
+  settingsFile: string;
+  defaults: { metrics: MetricDef[]; services: { query: string; nameLabel: string }; serverLabel: string; groupLabel: string; refreshSeconds: number };
+}
+
+/** 저장할 때 보내는 값. 토큰을 비우면 저장해 둔 것을 쓴다. */
+export type MonitorSettingsInput = Omit<MonitorConfigView, 'grafana'> & {
+  grafana: { url: string; datasourceUid: string; token?: string };
+  clearToken?: boolean;
+};
+
+export interface MonitorTrial {
+  ok: boolean;
+  error?: string;
+  groups?: MonitorGroup[];
+  datasources?: Array<{ uid: string; name: string; type: string; isDefault: boolean }>;
+}
+
 export const api = {
   // --- 인증 ---
   authStatus: () => request<AuthStatus>('/auth/status'),
@@ -308,6 +405,15 @@ export const api = {
   getMotd: () => request<{ lines: string[] }>('/motd'),
 
   // --- 알림 ---
+  // --- 모니터링 ---
+  getMonitor: () => request<MonitorSnapshot>('/monitor'),
+  refreshMonitor: () => request<MonitorSnapshot>('/monitor/refresh', { method: 'POST' }),
+  getMonitorConfig: () => request<MonitorConfigReply>('/monitor/config'),
+  saveMonitorConfig: (s: MonitorSettingsInput) =>
+    request<{ ok: boolean }>('/monitor/config', { method: 'PUT', ...json(s) }),
+  testMonitorConfig: (s: MonitorSettingsInput) =>
+    request<MonitorTrial>('/monitor/test', { method: 'POST', ...json(s) }),
+
   getNotifications: () => request<{ items: Notification[]; unread: number }>('/notifications'),
   addNotification: (input: {
     title: string;

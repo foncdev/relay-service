@@ -27,14 +27,31 @@ export class Monitor {
   private published = '';
 
   constructor(
-    private readonly cfg: MonitorConfig = loadMonitorConfig(),
-    private readonly source: MonitorSource | undefined = cfg.mode === 'grafana'
-      ? new GrafanaSource()
-      : cfg.mode === 'demo'
-        ? new DemoSource()
-        : undefined,
+    private cfg: MonitorConfig = loadMonitorConfig(),
+    private source: MonitorSource | undefined = sourceFor(cfg),
   ) {
     this.snapshot = empty(cfg, this.source?.name ?? 'off');
+  }
+
+  /** 지금 쓰는 설정. 토큰이 들어 있으니 밖으로 내보낼 때는 지운다. */
+  get config(): MonitorConfig {
+    return this.cfg;
+  }
+
+  /**
+   * 설정을 바꿔 다시 시작한다(웹에서 저장했을 때). 지난 상태 기준도 버린다 —
+   * 대상이 바뀌었는데 예전 기준과 견주면 엉뚱한 복구·장애 알림이 나간다.
+   */
+  reconfigure(cfg: MonitorConfig): void {
+    const running = this.timer !== undefined;
+    this.stop();
+    this.cfg = cfg;
+    this.source = sourceFor(cfg);
+    this.last = undefined;
+    this.published = '';
+    this.snapshot = empty(cfg, this.source?.name ?? 'off');
+    publish('monitor');
+    if (running || this.source) this.start();
   }
 
   get enabled(): boolean {
@@ -115,6 +132,40 @@ export class Monitor {
 export function signature(snap: MonitorSnapshot): string {
   const rows = snap.groups.flatMap((g) => g.items.map((i) => `${g.id}/${i.id}=${i.state}`));
   return `${snap.stale ? 'stale' : 'ok'}|${rows.sort().join(',')}`;
+}
+
+export function sourceFor(cfg: MonitorConfig): MonitorSource | undefined {
+  if (cfg.mode === 'grafana') return new GrafanaSource();
+  if (cfg.mode === 'demo') return new DemoSource();
+  return undefined;
+}
+
+/**
+ * 저장하지 않고 한 번 읽어 본다(웹의 '연결 시험'). 그룹·대상 모양과, Grafana면 고를 수 있는 데이터 소스를 준다.
+ * 알림·이벤트는 남기지 않는다.
+ */
+export async function trial(cfg: MonitorConfig): Promise<{
+  ok: boolean;
+  error?: string;
+  groups?: MonitorSnapshot['groups'];
+  datasources?: Array<{ uid: string; name: string; type: string; isDefault: boolean }>;
+}> {
+  const source = sourceFor(cfg);
+  if (!source) return { ok: false, error: L('모니터링이 꺼져 있습니다.', 'Monitoring is off.') };
+  let datasources;
+  if (source instanceof GrafanaSource) {
+    try {
+      datasources = await source.datasources(cfg);
+    } catch (err) {
+      return { ok: false, error: (err as Error).message };
+    }
+  }
+  try {
+    const groups = buildGroups(await source.sample(cfg), cfg, L('기타', 'Other'));
+    return { ok: true, groups, datasources };
+  } catch (err) {
+    return { ok: false, error: (err as Error).message, datasources };
+  }
 }
 
 function empty(cfg: MonitorConfig, source: string): MonitorSnapshot {

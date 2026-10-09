@@ -56,6 +56,12 @@ export class GrafanaSource implements MonitorSource {
     };
   }
 
+  /** Grafana의 데이터 소스 목록. 웹 설정에서 고르게 한다. */
+  async datasources(cfg: MonitorConfig): Promise<Array<{ uid: string; name: string; type: string; isDefault: boolean }>> {
+    const list = (await this.request(cfg, '/api/datasources')) as Array<{ uid: string; name: string; type: string; isDefault?: boolean }>;
+    return list.map((d) => ({ uid: d.uid, name: d.name, type: d.type, isDefault: d.isDefault === true }));
+  }
+
   /** 데이터 소스를 정하지 않았으면 기본(없으면 첫) Prometheus를 쓴다. */
   private async findPrometheus(cfg: MonitorConfig): Promise<string> {
     const list = (await this.request(cfg, '/api/datasources')) as Array<{ uid: string; type: string; isDefault?: boolean }>;

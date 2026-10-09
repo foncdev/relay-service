@@ -18,6 +18,7 @@ import {
 } from './api.js';
 import { Chat } from './Chat.js';
 import { Notifications } from './Notifications.js';
+import { Monitor } from './Monitor.js';
 import { Checklist } from './Checklist.js';
 import { Terminals } from './Terminals.js';
 import { Files } from './Files.js';
@@ -50,7 +51,7 @@ function sameSessions(a: SessionInfo[], b: SessionInfo[]): boolean {
   });
 }
 
-type Tab = 'sessions' | 'files' | 'term' | 'todo' | 'notif';
+type Tab = 'sessions' | 'files' | 'term' | 'todo' | 'notif' | 'monitor';
 
 export function App() {
   const t = msg();
@@ -253,6 +254,9 @@ export function App() {
           <button className={tab === 'notif' ? 'active' : ''} onClick={() => setTab('notif')}>
             {t.tabNotifications}
           </button>
+          <button className={tab === 'monitor' ? 'active' : ''} onClick={() => setTab('monitor')}>
+            {t.tabMonitor}
+          </button>
         </div>
         <span className="spacer" />
         <select
@@ -415,6 +419,8 @@ export function App() {
             <Notifications onToast={toast} />
           </div>
         )}
+
+        {tab === 'monitor' && <Monitor onToast={toast} />}
 
         {tab === 'files' &&
           (workspaceId ? (

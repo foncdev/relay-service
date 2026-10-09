@@ -229,3 +229,67 @@ test('가짜 원자료로 그룹 넷(웹·DB·스테이징·쇼핑몰)이 나오
   assert.equal(groups[0]!.state, 'down', 'web-03 worker DOWN');
   assert.ok(groups.some((g) => g.items.some((i) => i.metrics.some((m) => m.key === 'returns'))));
 });
+
+test('웹 설정: 기본값 → 저장한 값 → 환경변수 순으로 덮는다', async () => {
+  const { saveSettings, readSettings, settingsFile } = await import('../src/core/monitor/config.js');
+  const env = { RELAY_DATA_DIR: fs.mkdtempSync(path.join(os.tmpdir(), 'monitor-settings-')) };
+  saveSettings({ mode: 'grafana', grafana: { url: 'http://saved', token: 'saved-token' }, groupLabel: 'env', stats: [] }, env);
+  assert.equal((fs.statSync(settingsFile(env)).mode & 0o777).toString(8), '600', '토큰이 있어 600으로 둔다');
+  assert.equal(readSettings(env).grafana?.token, 'saved-token');
+
+  const saved = loadMonitorConfig(env);
+  assert.equal(saved.mode, 'grafana');
+  assert.equal(saved.grafana.url, 'http://saved');
+  assert.equal(saved.grafana.token, 'saved-token');
+  assert.equal(saved.groupLabel, 'env');
+  assert.equal(saved.metrics.length, 3, '저장하지 않은 지표는 기본값');
+
+  const over = loadMonitorConfig({ ...env, GRAFANA_URL: 'http://env/', GRAFANA_TOKEN: 'env-token', RELAY_MONITOR: 'demo' });
+  assert.equal(over.grafana.url, 'http://env');
+  assert.equal(over.grafana.token, 'env-token');
+  assert.equal(over.mode, 'demo');
+  assert.deepEqual(over.stats, [], '가짜 데이터라도 업무 지표를 비워 저장했으면 예시를 달지 않는다');
+
+  // 깨진 파일은 없는 것으로 본다.
+  fs.writeFileSync(settingsFile(env), '{bad');
+  assert.deepEqual(readSettings(env), {});
+});
+
+test('웹 설정 검사: 틀린 값은 무엇이 틀렸는지 담아 거절한다', async () => {
+  const { validateSettings } = await import('../src/core/monitor/config.js');
+  assert.throws(() => validateSettings({ mode: 'x' }), /mode/);
+  assert.throws(() => validateSettings({ grafana: { url: 'ftp://x' } }), /grafana\.url/);
+  assert.throws(() => validateSettings({ metrics: [{ key: 'cpu', label: 'CPU', query: '' }] }), /metrics\.query/);
+  assert.throws(() => validateSettings({ metrics: [{ key: 'a b', label: 'x', query: 'up' }] }), /key/);
+  assert.throws(() => validateSettings({ metrics: [{ key: 'a', label: 'A', query: 'up' }], stats: [{ key: 'a', label: 'B', query: 'x', group: 'g', item: 'i' }] }), /stats: a/);
+  assert.throws(() => validateSettings({ stats: [{ key: 'o', label: 'O', query: 'x', group: '', item: 'i' }] }), /group/);
+  const ok = validateSettings({
+    refreshSeconds: '5',
+    grafana: { url: 'https://g.example.com/' },
+    groups: { ' 웹 ': ['web-*', ' '] },
+    metrics: [{ key: 'cpu', label: 'CPU', query: 'q', unit: '%', max: '100', warn: '', crit: 95 }],
+    services: { query: '' },
+    stats: [{ key: 'orders', label: '주문', group: '쇼핑몰', item: '오늘', sql: 'SELECT 1', datasourceUid: 'mysql', lowerIsWorse: true }],
+  });
+  assert.equal(ok.refreshSeconds, 10);
+  assert.equal(ok.grafana?.url, 'https://g.example.com');
+  assert.deepEqual(ok.groups, { 웹: ['web-*'] });
+  assert.deepEqual(ok.metrics, [{ key: 'cpu', label: 'CPU', query: 'q', unit: '%', max: 100, crit: 95 }]);
+  assert.equal(ok.services, null, '서비스 쿼리를 비우면 서비스 UP/DOWN을 끈다');
+  assert.equal(ok.stats?.[0]?.sql, 'SELECT 1');
+});
+
+test('Monitor: 설정을 바꾸면 소스를 바꾸고 지난 상태 기준을 버린다', async () => {
+  const m = new Monitor({ ...base(), mode: 'off' });
+  assert.equal(m.enabled, false);
+  m.reconfigure({ ...base(), mode: 'demo' });
+  assert.equal(m.enabled, true);
+  const snap = await m.refresh();
+  assert.equal(snap.source, 'demo');
+  m.stop();
+});
+
+test('가짜 데이터 예시 업무 지표는 웹 설정 검사를 통과한다(그대로 저장할 수 있다)', async () => {
+  const { validateSettings, demoStats } = await import('../src/core/monitor/config.js');
+  assert.doesNotThrow(() => validateSettings({ stats: demoStats() }));
+});

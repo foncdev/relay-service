@@ -369,7 +369,21 @@ POST       /snippets/{id}/run  실행
 ```
 GET  /monitor           그룹 → 대상 → 지표·서비스. 설정이 없으면 {"enabled": false}
 POST /monitor/refresh   지금 다시 읽는다
+GET  /monitor/config    지금 쓰는 설정(토큰은 빼고 있는지만), 환경변수로 정해 못 바꾸는 칸
+PUT  /monitor/config    설정을 저장하고 바로 다시 읽는다(data/monitor.json)
+POST /monitor/test      저장하지 않고 한 번 읽어 본다. Grafana 데이터 소스 목록도 준다
 ```
+
+**웹 관리 화면(`/web` › 모니터링)** 에서 상태를 보고 설정을 바꾼다. 설정 탭에서 Grafana 주소·토큰·데이터 소스,
+서버 묶기(라벨·이름 패턴), 서버 지표, 서비스 UP/DOWN, 업무 지표를 고치고 '연결 시험'으로 확인한 뒤 저장한다.
+저장한 값은 relay 데이터 폴더의 `monitor.json`(권한 600)에 남는다. 설정은 아래 순서로 덮인다:
+
+```
+기본값 → RELAY_MONITOR_CONFIG 파일 → 웹에서 저장한 값 → 환경변수(RELAY_MONITOR·GRAFANA_URL·GRAFANA_TOKEN·GRAFANA_DATASOURCE_UID)
+```
+
+환경변수로 정한 칸은 웹에서 잠긴다. 웹에서 바꾸려면 `.env`에서 그 줄을 빼고 다시 띄운다.
+토큰은 화면·API로 돌려주지 않는다(저장돼 있는지만 보인다).
 
 Grafana의 데이터 소스 쿼리 API(`/api/ds/query`)로 30초마다 읽어, 무엇이 오든 같은 모양으로 바꿔 준다.
 안경·폰은 이것만 그린다 — 지표를 더해도 화면 코드는 그대로다.
@@ -545,7 +559,7 @@ agent → 서버 : {"type":"hello",        "version","capabilities"}   접속 �
 | `RELAY_MONITOR` | (자동) | 모니터링 원천. `grafana`·`demo`(가짜 데이터)·`off`. 비우면 `GRAFANA_URL`이 있을 때 `grafana` |
 | `GRAFANA_URL` / `GRAFANA_TOKEN` | (없음) | Grafana 주소와 Viewer 서비스 계정 토큰. 토큰은 이 서버에만 둔다 |
 | `GRAFANA_DATASOURCE_UID` | (자동) | 쓸 Prometheus 데이터 소스. 비우면 기본 Prometheus |
-| `RELAY_MONITOR_CONFIG` | (없음) | 그룹·쿼리·기준·업무 지표를 바꾸는 JSON(`monitor.example.json`) |
+| `RELAY_MONITOR_CONFIG` | (없음) | 그룹·쿼리·기준·업무 지표의 바탕 JSON(`monitor.example.json`). 웹에서 저장한 값이 그 위에 덮인다. 데이터 폴더의 `monitor.json`과 다른 파일로 둔다 |
 | `RELAY_LANG` | `ko` | 서버가 만드는 글(할 일 알림·안경 첫 줄·오류)의 언어. `ko` 또는 `en`. 폰 언어와 같게 둔다 — 다르면 폰에서 한 일에 배너가 한 번 더 뜬다. 시작 로그는 늘 한국어 |
 
 `RELAY_WEB_ROOT`와 `RELAY_GLASSES_ROOT`는 **다른 경로다.** 헷갈리면

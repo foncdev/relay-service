@@ -25,7 +25,18 @@ import { publish, subscribe, subscriberCount } from './core/events.js';
 import { toNotification } from './core/hook.js';
 import { snippets, SnippetError } from './core/snippets.js';
 import { Scheduler } from './core/scheduler.js';
-import { monitor } from './core/monitor/monitor.js';
+import { monitor, trial } from './core/monitor/monitor.js';
+import {
+  defaultMetrics,
+  envLocks,
+  loadMonitorConfig,
+  readSettings,
+  saveSettings,
+  settingsFile,
+  validateSettings,
+  type MonitorConfig,
+  type MonitorSettings,
+} from './core/monitor/config.js';
 import { advertise, serviceName } from './core/bonjour.js';
 import { firstRunGuide } from './core/guide.js';
 import { L } from './core/lang.js';
@@ -637,6 +648,76 @@ app.get('/monitor', (_req, res) => {
 // 지금 다시 읽는다(폰·안경의 새로고침).
 app.post('/monitor/refresh', async (_req, res) => {
   res.json(await monitor.refresh());
+});
+
+/** 토큰을 지운 설정. 웹 화면에 내보낼 때 쓴다. */
+function publicConfig(cfg: MonitorConfig): Omit<MonitorConfig, 'grafana'> & { grafana: { url: string; datasourceUid: string } } {
+  const { token: _token, ...grafana } = cfg.grafana;
+  return { ...cfg, grafana };
+}
+
+/**
+ * 웹 관리 화면의 모니터링 설정.
+ * effective는 지금 쓰는 값(기본값·파일·저장한 값·환경변수를 모은 것), locks는 환경변수로 정해 못 바꾸는 칸.
+ * 토큰은 돌려주지 않는다 — 있는지와 어디서 왔는지만.
+ */
+app.get('/monitor/config', (_req, res) => {
+  const saved = readSettings();
+  const locks = envLocks();
+  res.json({
+    effective: publicConfig(monitor.config),
+    hasToken: monitor.config.grafana.token !== '',
+    tokenFrom: locks.token ? 'env' : saved.grafana?.token ? 'saved' : '',
+    locks,
+    configFile: process.env.RELAY_MONITOR_CONFIG ?? null,
+    settingsFile: settingsFile(),
+    defaults: { metrics: defaultMetrics(), services: { query: 'up', nameLabel: 'job' }, serverLabel: 'instance', groupLabel: 'job', refreshSeconds: 30 },
+  });
+});
+
+/**
+ * 받은 설정을 저장할 모양으로. 토큰은 비워 보내면 저장해 둔 것을 그대로 쓰고, clearToken이면 지운다.
+ * 환경변수로 정한 칸은 저장하지 않는다(어차피 환경변수가 이긴다).
+ */
+function incomingSettings(body: unknown): MonitorSettings {
+  const raw = (body ?? {}) as Record<string, unknown> & { clearToken?: boolean };
+  const next = validateSettings({ ...raw, clearToken: undefined });
+  const prevToken = readSettings().grafana?.token ?? '';
+  const token = raw.clearToken ? '' : next.grafana?.token || prevToken;
+  next.grafana = { ...(next.grafana ?? {}), token };
+  const locks = envLocks();
+  if (locks.mode) delete next.mode;
+  if (locks.url) delete next.grafana.url;
+  if (locks.token || !next.grafana.token) delete next.grafana.token;
+  if (locks.datasourceUid) delete next.grafana.datasourceUid;
+  return next;
+}
+
+app.put('/monitor/config', (req, res) => {
+  let next: MonitorSettings;
+  try {
+    next = incomingSettings(req.body);
+  } catch (err) {
+    res.status(400).json({ error: { code: 'bad_settings', message: (err as Error).message } });
+    return;
+  }
+  saveSettings(next);
+  monitor.reconfigure(loadMonitorConfig(process.env, next));
+  console.log(`[relay] 모니터링 설정을 바꿨습니다: ${monitor.current().source}`);
+  void monitor.refresh();
+  res.json({ ok: true, effective: publicConfig(monitor.config) });
+});
+
+// 저장하지 않고 한 번 읽어 본다. 고를 수 있는 Grafana 데이터 소스도 함께 준다.
+app.post('/monitor/test', async (req, res) => {
+  let next: MonitorSettings;
+  try {
+    next = incomingSettings(req.body);
+  } catch (err) {
+    res.status(400).json({ error: { code: 'bad_settings', message: (err as Error).message } });
+    return;
+  }
+  res.json(await trial(loadMonitorConfig(process.env, next)));
 });
 
 app.get('/notifications', (req, res) => {
