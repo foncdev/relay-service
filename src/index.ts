@@ -25,6 +25,7 @@ import { publish, subscribe, subscriberCount } from './core/events.js';
 import { toNotification } from './core/hook.js';
 import { snippets, SnippetError } from './core/snippets.js';
 import { Scheduler } from './core/scheduler.js';
+import { monitor } from './core/monitor/monitor.js';
 import { advertise, serviceName } from './core/bonjour.js';
 import { firstRunGuide } from './core/guide.js';
 import { L } from './core/lang.js';
@@ -628,6 +629,16 @@ app.post('/snippets/:id/run', async (req, res) => {
 // 완료·오류 알림을 쌓아둔다. 안경에서 한 번 놓쳐도 나중에 다시 볼 수 있다.
 // 세션 라우트보다 먼저 와야 /notifications가 중계로 새지 않는다.
 
+// 모니터링(Grafana). 그룹 → 서버 → 지표·서비스 공통 모양으로 준다. 설정이 없으면 enabled: false.
+app.get('/monitor', (_req, res) => {
+  res.json(monitor.current());
+});
+
+// 지금 다시 읽는다(폰·안경의 새로고침).
+app.post('/monitor/refresh', async (_req, res) => {
+  res.json(await monitor.refresh());
+});
+
 app.get('/notifications', (req, res) => {
   const items = notifications.list();
   const unreadOnly = String((req.query as { unread?: unknown })?.unread ?? '') === '1';
@@ -1175,6 +1186,9 @@ server.listen(config.port, config.host, () => {
 
   // 예약한 명령을 돌린다. 등록된 것이 없으면 아무 일도 하지 않는다.
   scheduler.start();
+  // 모니터링: GRAFANA_URL(또는 RELAY_MONITOR=demo)이 있으면 주기마다 읽는다.
+  monitor.start();
+  if (monitor.enabled) console.log(`[relay] 모니터링: ${monitor.current().source}`);
   const cron = snippets.list().filter((x) => x.kind === 'cron').length;
   if (cron > 0) console.log(`[relay] 예약 명령 ${cron}건을 주기마다 돌립니다.`);
 
@@ -1189,6 +1203,7 @@ for (const sig of ['SIGINT', 'SIGTERM'] as const) {
   process.on(sig, () => {
     console.log(`\n[relay] ${sig} 수신, 종료합니다.`);
     scheduler.stop();
+    monitor.stop();
     stopAdvertising();
     server.close(() => process.exit(0));
     // 실시간 연결(SSE·스트림)은 스스로 끝나지 않는다. close만 하면 안경·폰이

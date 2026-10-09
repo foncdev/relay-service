@@ -364,6 +364,30 @@ POST       /snippets/{id}/run  실행
 예약 실행은 사람이 보고 있지 않으므로 확인이 필요한 명령은 돌리지
 않는다. 그런 것이 예약되어 있으면 한 번 알리고 예약을 끈다.
 
+### 모니터링 (Grafana)
+
+```
+GET  /monitor           그룹 → 대상 → 지표·서비스. 설정이 없으면 {"enabled": false}
+POST /monitor/refresh   지금 다시 읽는다
+```
+
+Grafana의 데이터 소스 쿼리 API(`/api/ds/query`)로 30초마다 읽어, 무엇이 오든 같은 모양으로 바꿔 준다.
+안경·폰은 이것만 그린다 — 지표를 더해도 화면 코드는 그대로다.
+
+```
+그룹 → 대상 → 지표(값·단위·상태) · 서비스(UP/DOWN)
+web    → web-03 → CPU 89%(주의), 디스크 44% · worker DOWN, nginx UP
+쇼핑몰 → 오늘   → 주문 1,248건, 반품 57건(주의), 결제 실패율 2.3%
+```
+
+- **서버 지표**(기본: Prometheus + node_exporter의 CPU·디스크·메모리, `up`으로 서비스 UP/DOWN)는
+  `instance` 라벨로 대상을, `job` 라벨(또는 설정의 `groups` 이름 패턴)로 그룹을 가른다.
+- **업무 지표**(`stats`)는 설정에 그룹·대상·쿼리를 적는다. 지표마다 데이터 소스를 정할 수 있고 SQL(`sql`)도 된다.
+  `lowerIsWorse`면 낮을수록 나쁘다(주문 수 등).
+- 상태: 지표마다 `warn`·`crit` 기준, 서비스는 DOWN. 대상·그룹은 그 안에서 가장 나쁜 것. 문제 있는 것이 앞에 온다.
+- 대상이 DOWN·위험이 되면 알림 한 번, 나아지면 한 번(안경·폰에 뜬다). 서버를 다시 켤 때 이미 나빠 있던 것은 알리지 않는다.
+- 조회가 실패하면 그 전 값을 두고 `stale`·`error`를 싣는다. 값이 바뀌면 `/events`로 `monitor`를 알린다.
+
 ### 외부 알림 훅
 
 다른 서비스가 안경에 한 줄 띄울 때 쓴다. 넣으면 SSE로 안경·폰·웹에
@@ -518,6 +542,10 @@ agent → 서버 : {"type":"hello",        "version","capabilities"}   접속 �
 | `RELAY_RATE_LIMIT` | `300` | 분당 요청 상한 |
 | `RELAY_LOGIN_LIMIT` | `10` | IP당 분당 로그인·초기 설정 시도 |
 | `RELAY_TRUST_PROXY` | (없음) | 리버스 프록시 뒤에 둘 때 `1`. 실제 IP를 `X-Forwarded-For`에서 읽는다. 프록시 없이 켜면 누구나 IP를 바꿔 시도 제한을 피한다 |
+| `RELAY_MONITOR` | (자동) | 모니터링 원천. `grafana`·`demo`(가짜 데이터)·`off`. 비우면 `GRAFANA_URL`이 있을 때 `grafana` |
+| `GRAFANA_URL` / `GRAFANA_TOKEN` | (없음) | Grafana 주소와 Viewer 서비스 계정 토큰. 토큰은 이 서버에만 둔다 |
+| `GRAFANA_DATASOURCE_UID` | (자동) | 쓸 Prometheus 데이터 소스. 비우면 기본 Prometheus |
+| `RELAY_MONITOR_CONFIG` | (없음) | 그룹·쿼리·기준·업무 지표를 바꾸는 JSON(`monitor.example.json`) |
 | `RELAY_LANG` | `ko` | 서버가 만드는 글(할 일 알림·안경 첫 줄·오류)의 언어. `ko` 또는 `en`. 폰 언어와 같게 둔다 — 다르면 폰에서 한 일에 배너가 한 번 더 뜬다. 시작 로그는 늘 한국어 |
 
 `RELAY_WEB_ROOT`와 `RELAY_GLASSES_ROOT`는 **다른 경로다.** 헷갈리면

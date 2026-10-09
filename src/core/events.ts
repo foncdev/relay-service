@@ -10,7 +10,7 @@
  */
 
 /** 바뀐 것의 종류. */
-export type Topic = 'checklist' | 'notifications';
+export type Topic = 'checklist' | 'notifications' | 'monitor';
 
 type Listener = (topic: Topic) => void;
 
