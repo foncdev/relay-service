@@ -1,6 +1,6 @@
 {
   "name": "@foncdev/relay-service",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "description": "agent-cli와 클라이언트(relay 앱, G2) 사이의 중계 서버. 세션 관리와 파일 관리를 제공한다.",
