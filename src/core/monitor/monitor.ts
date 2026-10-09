@@ -15,13 +15,16 @@ const ALERTING: MonitorState[] = ['down', 'crit'];
  * - 대상(서버·업무 지표 묶음)이 DOWN·위험이 되면 한 번, 다시 괜찮아지면 한 번 알림을 남긴다(안경·폰에 뜬다).
  *   켜자마자 이미 나빠 있던 것은 알리지 않는다 — 서버를 다시 켤 때마다 같은 알림이 쏟아진다.
  * - 조회가 실패하면 그 전 값을 그대로 두고 stale·error를 싣는다.
- * - 값이 바뀌면 /events로 'monitor'를 알린다. 안경은 그때 다시 읽는다.
+ * - 상태(대상별 정상·주의·위험·DOWN, 읽기 실패)가 바뀌면 /events로 'monitor'를 알린다. 안경은 그때 다시 읽는다.
+ *   값만 흔들릴 때는 알리지 않는다 — 30초마다 안경·폰을 깨우면 배터리만 먹는다.
  */
 export class Monitor {
   private snapshot: MonitorSnapshot;
   private timer?: ReturnType<typeof setInterval>;
   /** 대상별 지난 상태(그룹/대상). 처음 한 번은 기준만 잡는다. */
   private last?: Map<string, { state: MonitorState; item: MonitorItem; group: string }>;
+  /** 지난번에 알린 상태 모양. 같으면 'monitor'를 다시 알리지 않는다. */
+  private published = '';
 
   constructor(
     private readonly cfg: MonitorConfig = loadMonitorConfig(),
@@ -73,7 +76,11 @@ export class Monitor {
     } catch (err) {
       this.snapshot = { ...this.snapshot, error: (err as Error).message, stale: this.snapshot.groups.length > 0 };
     }
-    publish('monitor');
+    const shape = signature(this.snapshot);
+    if (shape !== this.published) {
+      this.published = shape;
+      publish('monitor');
+    }
     return this.snapshot;
   }
 
@@ -102,6 +109,12 @@ export class Monitor {
     }
     // 사라진 대상은 알리지 않는다. 대상에서 뺀 것과 꺼진 것을 가를 수 없다(꺼지면 up이 0으로 남는다).
   }
+}
+
+/** 상태의 모양: 그룹/대상별 상태와 읽기 실패 여부. 값은 넣지 않는다. */
+export function signature(snap: MonitorSnapshot): string {
+  const rows = snap.groups.flatMap((g) => g.items.map((i) => `${g.id}/${i.id}=${i.state}`));
+  return `${snap.stale ? 'stale' : 'ok'}|${rows.sort().join(',')}`;
 }
 
 function empty(cfg: MonitorConfig, source: string): MonitorSnapshot {

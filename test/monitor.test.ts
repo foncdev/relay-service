@@ -186,6 +186,28 @@ test('Monitor: 조회가 실패하면 그 전 값을 두고 stale·error를 싣�
   assert.equal(snap.groups[0]!.items[0]!.name, 'web-01');
 });
 
+test('Monitor: 값만 흔들리면 monitor 이벤트를 다시 보내지 않고, 상태가 바뀌면 보낸다', async () => {
+  const { subscribe } = await import('../src/core/events.js');
+  let cpu = 10;
+  const source = {
+    name: 'fake',
+    sample: async () => ({ metrics: { cpu: [s('web-01:9100', 'web', cpu)], disk: [], mem: [] }, services: [], stats: {} }),
+  };
+  const seen: string[] = [];
+  const off = subscribe((topic) => seen.push(topic));
+  const m = new Monitor({ ...base(), mode: 'grafana' }, source);
+  await m.refresh();
+  cpu = 20;
+  await m.refresh();
+  cpu = 30;
+  await m.refresh();
+  assert.equal(seen.filter((t) => t === 'monitor').length, 1, '처음 한 번만');
+  cpu = 85;
+  await m.refresh();
+  assert.equal(seen.filter((t) => t === 'monitor').length, 2, '주의로 바뀌면 알린다');
+  off();
+});
+
 test('설정: GRAFANA_URL이 있으면 grafana, 없으면 off. 파일은 덮어쓰되 토큰은 환경변수만', () => {
   assert.equal(loadMonitorConfig({}).mode, 'off');
   assert.equal(loadMonitorConfig({ GRAFANA_URL: 'http://g/' }).grafana.url, 'http://g');
