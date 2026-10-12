@@ -3,7 +3,7 @@
   "version": "0.1.5",
   "private": true,
   "type": "module",
-  "description": "Claude Code CLI 매니저 웹 UI",
+  "description": "Relay 서비스 웹 UI",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

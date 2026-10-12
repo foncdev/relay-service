@@ -20,4 +20,4 @@ export const BANNER = String.raw`
  * 서버와 맞춰 두는 원본. 로그인 화면에는 표시하지 않는다.
  * 배너 테스트가 이 값을 서버 것과 비교하므로 그대로 둔다.
  */
-export const TAGLINE = 'Claude Code 원격 제어';
+export const TAGLINE = '원격 제어';

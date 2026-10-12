@@ -18,7 +18,7 @@ export const BANNER = String.raw`
 `.trim();
 
 /** 배너 아래에 붙이는 한 줄. */
-export const TAGLINE = 'Claude Code 원격 제어';
+export const TAGLINE = '원격 제어';
 
 /**
  * G2 안경용 DEV 로고. 6줄 × 14자.
