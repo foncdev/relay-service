@@ -1,6 +1,6 @@
 {
   "name": "@foncdev/relay-web",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "private": true,
   "type": "module",
   "description": "Relay 서비스 웹 UI",
