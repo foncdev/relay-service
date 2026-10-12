@@ -33,7 +33,6 @@ const LANG_STORAGE = 'relay.web.lang';
 const ko = {
   // --- 공통 ---
   appTitle: 'Claude Code 매니저',
-  tagline: 'Claude Code 원격 제어',
   cancel: '취소',
   ok: '확인',
   close: '닫기',
@@ -332,7 +331,6 @@ export type Messages = {
 
 const en: Messages = {
   appTitle: 'Claude Code Manager',
-  tagline: 'Claude Code remote control',
   cancel: 'Cancel',
   ok: 'OK',
   close: 'Close',

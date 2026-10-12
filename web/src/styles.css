@@ -884,11 +884,9 @@ textarea {
   overflow: hidden;
 }
 
-.banner-tag {
-  margin: 0 0 18px;
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  font-size: 12px;
-  color: var(--dim);
+/* 로그인 화면에서는 배너 바로 아래 입력 상자가 붙지 않게 띄운다. */
+.login .banner {
+  margin-bottom: 18px;
 }
 
 .motd-banner {

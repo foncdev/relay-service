@@ -17,7 +17,7 @@ export const BANNER = String.raw`
 `.trim();
 
 /**
- * 서버와 맞춰 두는 원본. 화면에는 i18n.ts의 tagline(언어별)을 쓴다.
+ * 서버와 맞춰 두는 원본. 로그인 화면에는 표시하지 않는다.
  * 배너 테스트가 이 값을 서버 것과 비교하므로 그대로 둔다.
  */
 export const TAGLINE = 'Claude Code 원격 제어';

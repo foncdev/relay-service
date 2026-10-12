@@ -67,8 +67,6 @@ export function Login({ onDone }: { onDone: (username: string) => void }) {
       <pre className="banner" aria-label="FONCDEV">
         {BANNER}
       </pre>
-      {/* 태그라인은 banner.ts의 TAGLINE(서버와 같은 한국어)을 언어별로 옮긴 것이다. */}
-      <p className="banner-tag">{t.tagline}</p>
       <form
         className="login-box"
         onSubmit={(e) => {
